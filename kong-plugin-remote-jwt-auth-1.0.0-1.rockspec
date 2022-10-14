@@ -1,6 +1,6 @@
 local plugin_name = "remote-jwt-auth"
 local package_name = "kong-plugin-" .. plugin_name
-local package_version = "dev"
+local package_version = "1.0.0"
 local rockspec_revision = "1"
 
 local github_account_name = "harmonicai"

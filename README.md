@@ -13,7 +13,7 @@ To use this plugin, you will need to install it, configure a nginx shared dictio
 For installing the plugin, you can use luarocks. Example:
 
 ```sh
-luarocks install https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/master/kong-plugin-remote-jwt-auth-dev-1.rockspec
+luarocks install https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v1.0.0/kong-plugin-remote-jwt-auth-1.0.0-1.rockspec
 ```
 
 A minimal example `Dockerfile` containing this would be:
@@ -21,7 +21,7 @@ A minimal example `Dockerfile` containing this would be:
 FROM kong:3.0
 USER root
 RUN apk add --no-cache gcc musl-dev
-RUN luarocks install https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/master/kong-plugin-remote-jwt-auth-dev-1.rockspec
+RUN luarocks install https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v1.0.0/kong-plugin-remote-jwt-auth-1.0.0-1.rockspec
 USER kong
 ```
 
