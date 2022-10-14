@@ -1,0 +1,33 @@
+name: autoformatter
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN}}
+      - uses: JohnnyMorganz/stylua-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v0.15.1
+          args: --verbose --check --glob "**/*.rockspec" --glob "**/*.lua" .
+      - name: Commit if we need to
+        if: failure()
+        uses: JohnnyMorganz/stylua-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v0.15.1
+          args: --verbose --glob "**/*.rockspec" --glob "**/*.lua" .
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        if: failure()
+        with:
+          commit_message: Autofixes
