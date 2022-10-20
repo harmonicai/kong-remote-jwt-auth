@@ -10,7 +10,7 @@ local cache = require("kong.plugins.remote-jwt-auth.cache")
 local assert = assert
 
 local PubSubHandler = {
-    VERSION = "1.0.0",
+    VERSION = "1.0.1",
     PRIORITY = 1500,
 }
 
