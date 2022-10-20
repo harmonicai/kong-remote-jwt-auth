@@ -11,12 +11,13 @@ local assert = assert
 
 local PubSubHandler = {
     VERSION = "1.0.0",
-    -- PRIORITY = 1500,
-    PRIORITY = 100000,
+    PRIORITY = 1500,
 }
 
 local AUTHORIZATION = "authorization"
 local PROXY_AUTHORIZATION = "proxy-authorization"
+local TOKEN_USER_ID = "X-Token-User-Id"
+local TOKEN_USER_EMAIL = "X-Token-User-Email"
 
 local function generate_cache_key(config, key)
     local digest = sha512:new()
@@ -190,6 +191,17 @@ local function do_authentication(config)
             kong.log("Disallowed value for claim ", claim_to_verify.name, ": ", claim_in_jwt)
             return false, { status = 401, message = "Unauthorized" }
         end
+    end
+
+    local set_header = kong.service.request.set_header
+    local pl_sub = jwt.claims.sub
+    if pl_sub then
+        set_header(TOKEN_USER_ID, pl_sub)
+    end
+
+    local user_email = jwt.claims.email
+    if user_email then
+        set_header(TOKEN_USER_EMAIL, user_email)
     end
 
     return true
