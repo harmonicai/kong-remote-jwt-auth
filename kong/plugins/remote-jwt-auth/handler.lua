@@ -119,7 +119,7 @@ local function do_authentication(config)
     local authorization_value = kong.request.get_header(AUTHORIZATION)
     local proxy_authorization_value = kong.request.get_header(PROXY_AUTHORIZATION)
     local args = kong.request.get_query()
-    local query_authorization_value = args["jwt"]
+    local query_authorization_value = args and args["jwt"]
 
     if not (authorization_value or proxy_authorization_value or query_authorization_value) then
         return false,
