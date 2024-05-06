@@ -10,7 +10,7 @@ local cache = require("kong.plugins.remote-jwt-auth.cache")
 local assert = assert
 
 local PubSubHandler = {
-    VERSION = "1.0.1",
+    VERSION = "1.0.0",
     PRIORITY = 1500,
 }
 
@@ -118,8 +118,10 @@ local function do_authentication(config)
     -- If both headers are missing, return 401
     local authorization_value = kong.request.get_header(AUTHORIZATION)
     local proxy_authorization_value = kong.request.get_header(PROXY_AUTHORIZATION)
+    local args = kong.request.get_query()
+    local query_authorization_value = args and args["jwt"]
 
-    if not (authorization_value or proxy_authorization_value) then
+    if not (authorization_value or proxy_authorization_value or query_authorization_value) then
         return false,
             {
                 status = 401,
@@ -130,7 +132,14 @@ local function do_authentication(config)
             }
     end
 
-    local jwt_value = authorization_value and authorization_value or proxy_authorization_value
+    -- local jwt_value = authorization_value and authorization_value or proxy_authorization_value
+    if (authorization_value) then
+        jwt_value = authorization_value
+    elseif (proxy_authorization_value) then
+        jwt_value = proxy_authorization_value
+    else
+        jwt_value = query_authorization_value
+    end
     local without_bearer = string.gsub(jwt_value, "^[Bb]earer ", "")
     local jwt, err = jwt_decoder:new(without_bearer)
     if err then
