@@ -15,6 +15,11 @@ return {
                 fields = {
                     { anonymous = { type = "string" } },
                     { authenticated_consumer = { type = "string", required = true } },
+                    { uri_param_names = {
+                        type = "set",
+                        elements = { type = "string" },
+                        default = { "jwt" },
+                    }, },
                     {
                         signing_urls = {
                             type = "array",
