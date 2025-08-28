@@ -133,9 +133,9 @@ local function do_authentication(config)
     end
 
     local jwt_value
-    if (authorization_value) then
+    if authorization_value then
         jwt_value = authorization_value
-    elseif (proxy_authorization_value) then
+    elseif proxy_authorization_value then
         jwt_value = proxy_authorization_value
     else
         jwt_value = query_authorization_value
