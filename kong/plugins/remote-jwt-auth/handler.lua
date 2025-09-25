@@ -18,6 +18,7 @@ local AUTHORIZATION = "authorization"
 local PROXY_AUTHORIZATION = "proxy-authorization"
 local TOKEN_USER_ID = "X-Token-User-Id"
 local TOKEN_USER_EMAIL = "X-Token-User-Email"
+local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
 
 local function generate_cache_key(config, key)
     local digest = sha512:new()
@@ -112,6 +113,64 @@ local function list_contains(haystack, needle)
         end
     end
     return false
+end
+
+local function fetch_jwt_from_backend(config, consumer_id)
+    if not config.jwt_service_url then
+        return nil, nil
+    end
+
+    local cache_key = generate_cache_key(config, "backend-jwt")
+    local cached_jwt, err = cache:get(cache_key)
+    if err then
+        kong.log.err("Failed to get cached backend JWT: ", err)
+    elseif cached_jwt then
+        return cached_jwt, nil
+    end
+
+    local httpc, err = http.new()
+    if httpc == nil then
+        kong.log.err("Failed to start HTTP request for backend JWT: ", err)
+        return nil, err
+    end
+
+    httpc:set_timeout(config.jwt_service_timeout or 5000)
+    local start_of_request = os.time()
+
+    -- Get all original request headers to pass to backend service
+    local original_headers = kong.request.get_headers()
+
+    local res, err = httpc:request_uri(config.jwt_service_url, {
+        method = "GET",
+        headers = original_headers
+    })
+
+    if res == nil then
+        kong.log.err("Request for backend JWT failed: ", err)
+        return nil, err
+    end
+
+    if res.status ~= 200 then
+        kong.log.err("Backend JWT service returned status: ", res.status)
+        return nil, "Backend service error: " .. res.status
+    end
+
+    local jwt_token = res.body
+
+    if not jwt_token or jwt_token == "" then
+        kong.log.err("Backend JWT service response missing JWT token")
+        return nil, "Missing JWT token in response"
+    end
+
+    local ttl = 300  -- Default TTL since response is just the token string
+    local expires_at = start_of_request + ttl
+
+    local success, err = cache:store(cache_key, jwt_token, expires_at)
+    if not success then
+        kong.log.err("Failed to cache backend JWT: ", err)
+    end
+
+    return jwt_token, nil
 end
 
 local function do_authentication(config)
@@ -281,6 +340,19 @@ function PubSubHandler:access(config)
             return error(err)
         end
         set_consumer(consumer, config)
+    end
+
+    -- Fetch JWT from backend service if configured
+    if config.jwt_service_url then
+        local consumer = kong.client.get_consumer()
+        local consumer_id = consumer and consumer.username or config.anonymous
+        local backend_jwt, err = fetch_jwt_from_backend(config, consumer_id)
+
+        if backend_jwt then
+            kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
+        elseif err then
+            kong.log.warn("Failed to fetch backend JWT (request will continue): ", err)
+        end
     end
 end
 

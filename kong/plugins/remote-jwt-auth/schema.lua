@@ -67,6 +67,18 @@ return {
                         },
                     },
                     { timeout = { type = "number", default = 10000 } },
+                    {
+                        jwt_service_url = {
+                            type = "string",
+                            required = false,
+                        },
+                    },
+                    {
+                        jwt_service_timeout = {
+                            type = "number",
+                            default = 5000,
+                        },
+                    },
                 },
             },
         },
