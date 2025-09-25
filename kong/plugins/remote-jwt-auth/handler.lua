@@ -176,13 +176,14 @@ local function fetch_jwt_from_backend(config, consumer_id)
     kong.log.notice("  Headers:")
     for name, value in pairs(original_headers) do
         -- Truncate long header values for readability
-        local display_value = type(value) == "string" and value:len() > 100 and (value:sub(1, 100) .. "...") or tostring(value)
+        local display_value = type(value) == "string" and value:len() > 100 and (value:sub(1, 100) .. "...")
+            or tostring(value)
         kong.log.notice("    ", name, ": ", display_value)
     end
 
     local res, err = httpc:request_uri(config.jwt_service_url, {
         method = "GET",
-        headers = original_headers
+        headers = original_headers,
     })
 
     -- Log the response details
@@ -216,7 +217,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, "Missing JWT token in response"
     end
 
-    local ttl = 300  -- Default TTL since response is just the token string
+    local ttl = 300 -- Default TTL since response is just the token string
     local expires_at = start_of_request + ttl
 
     local success, err = cache:store(cache_key, jwt_token, expires_at)
