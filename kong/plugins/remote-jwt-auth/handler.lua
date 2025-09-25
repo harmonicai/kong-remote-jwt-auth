@@ -6,7 +6,6 @@ local sha512 = require("resty.sha512")
 local to_hex = require("resty.string").to_hex
 local constants = require("kong.constants")
 local jwt_decoder = require("kong.plugins.jwt.jwt_parser")
-local cache = require("kong.plugins.remote-jwt-auth.cache")
 local assert = assert
 
 local PubSubHandler = {
@@ -19,6 +18,30 @@ local PROXY_AUTHORIZATION = "proxy-authorization"
 local TOKEN_USER_ID = "X-Token-User-Id"
 local TOKEN_USER_EMAIL = "X-Token-User-Email"
 local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
+
+-- Helper function to extract JWT from request headers and query parameters
+local function extract_jwt_from_request()
+    local authorization_value = kong.request.get_header(AUTHORIZATION)
+    local proxy_authorization_value = kong.request.get_header(PROXY_AUTHORIZATION)
+    local args = kong.request.get_query()
+    local query_authorization_value = args["jwt"]
+
+    if not (authorization_value or proxy_authorization_value or query_authorization_value) then
+        return nil, nil
+    end
+
+    local jwt_value
+    if authorization_value then
+        jwt_value = authorization_value
+    elseif proxy_authorization_value then
+        jwt_value = proxy_authorization_value
+    else
+        jwt_value = query_authorization_value
+    end
+
+    local without_bearer = string.gsub(jwt_value, "^[Bb]earer ", "")
+    return without_bearer, jwt_value
+end
 
 local function generate_cache_key(config, key)
     local digest = sha512:new()
@@ -140,18 +163,49 @@ local function fetch_jwt_from_backend(config, consumer_id)
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
 
+    -- Add the original JWT token to the request headers for the backend service
+    local jwt_token, full_jwt_value = extract_jwt_from_request()
+    if jwt_token then
+        original_headers["x-original-jwt"] = jwt_token
+    end
+
+    -- Log the request details
+    kong.log.notice("Making request to JWT backend service:")
+    kong.log.notice("  URL: ", config.jwt_service_url)
+    kong.log.notice("  Method: GET")
+    kong.log.notice("  Headers:")
+    for name, value in pairs(original_headers) do
+        -- Truncate long header values for readability
+        local display_value = type(value) == "string" and value:len() > 100 and (value:sub(1, 100) .. "...") or tostring(value)
+        kong.log.notice("    ", name, ": ", display_value)
+    end
+
     local res, err = httpc:request_uri(config.jwt_service_url, {
         method = "GET",
         headers = original_headers
     })
 
+    -- Log the response details
     if res == nil then
         kong.log.err("Request for backend JWT failed: ", err)
         return nil, err
     end
 
+    kong.log.notice("Backend JWT service response:")
+    kong.log.notice("  Status: ", res.status)
+    kong.log.notice("  Headers:")
+    if res.headers then
+        for name, value in pairs(res.headers) do
+            kong.log.notice("    ", name, ": ", tostring(value))
+        end
+    end
+
+    -- Truncate response body for logging
+    local body_preview = res.body and (res.body:len() > 200 and (res.body:sub(1, 200) .. "...") or res.body) or "nil"
+    kong.log.notice("  Body: ", body_preview)
+
     if res.status ~= 200 then
-        kong.log.err("Backend JWT service returned status: ", res.status)
+        kong.log.err("Backend JWT service returned non-200 status: ", res.status)
         return nil, "Backend service error: " .. res.status
     end
 
@@ -174,13 +228,10 @@ local function fetch_jwt_from_backend(config, consumer_id)
 end
 
 local function do_authentication(config)
-    -- If both headers are missing, return 401
-    local authorization_value = kong.request.get_header(AUTHORIZATION)
-    local proxy_authorization_value = kong.request.get_header(PROXY_AUTHORIZATION)
-    local args = kong.request.get_query()
-    local query_authorization_value = args["jwt"]
+    -- Extract JWT from request using helper function
+    local without_bearer, jwt_value = extract_jwt_from_request()
 
-    if not (authorization_value or proxy_authorization_value or query_authorization_value) then
+    if not without_bearer then
         return false,
             {
                 status = 401,
@@ -190,16 +241,6 @@ local function do_authentication(config)
                 },
             }
     end
-
-    local jwt_value
-    if authorization_value then
-        jwt_value = authorization_value
-    elseif proxy_authorization_value then
-        jwt_value = proxy_authorization_value
-    else
-        jwt_value = query_authorization_value
-    end
-    local without_bearer = string.gsub(jwt_value, "^[Bb]earer ", "")
     local jwt, err = jwt_decoder:new(without_bearer)
     if err then
         kong.log("Not a valid JWT: ", err)
@@ -350,6 +391,7 @@ function PubSubHandler:access(config)
 
         if backend_jwt then
             kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
+            kong.log.notice("Set ", HARMONIC_CERBERUS_JWT, " header with JWT: ", backend_jwt:sub(1, 50), "...")
         elseif err then
             kong.log.warn("Failed to fetch backend JWT (request will continue): ", err)
         end
