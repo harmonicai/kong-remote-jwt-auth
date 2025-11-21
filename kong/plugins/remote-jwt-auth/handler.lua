@@ -6,6 +6,7 @@ local sha512 = require("resty.sha512")
 local to_hex = require("resty.string").to_hex
 local constants = require("kong.constants")
 local jwt_decoder = require("kong.plugins.jwt.jwt_parser")
+local cache = require("kong.plugins.remote-jwt-auth.cache")
 local assert = assert
 
 local PubSubHandler = {
