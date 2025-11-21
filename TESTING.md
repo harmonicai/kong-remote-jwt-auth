@@ -21,8 +21,11 @@ spec/
 
 ### Minimal Setup (Standalone Tests)
 ```bash
-# Install basic dependencies
-brew install lua luarocks
+# Install basic dependencies (lua 5.1 is needed for kong)
+brew install luajit luarocks
+luarocks config lua_version 5.1
+luarocks config lua_interpreter luajit
+luarocks --lua-version=5.1
 luarocks install lua-cjson
 
 # Run standalone unit tests (no Kong required)
@@ -32,7 +35,10 @@ lua spec/unit/simple-backend-jwt-test.lua
 ### Full Setup (All Tests)
 ```bash
 # Install LuaRocks if not already installed
-brew install luarocks
+brew install luajit luarocks
+luarocks config lua_version 5.1
+luarocks config lua_interpreter luajit
+luarocks --lua-version=5.1
 
 # Install testing framework
 luarocks install busted
