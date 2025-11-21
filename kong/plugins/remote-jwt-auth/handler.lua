@@ -9,7 +9,7 @@ local jwt_decoder = require("kong.plugins.jwt.jwt_parser")
 local assert = assert
 
 local PubSubHandler = {
-    VERSION = "1.0.0",
+    VERSION = "2.0.0",
     PRIORITY = 1500,
 }
 
