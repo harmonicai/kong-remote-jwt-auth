@@ -20,7 +20,7 @@ local TOKEN_USER_ID = "X-Token-User-Id"
 local TOKEN_USER_EMAIL = "X-Token-User-Email"
 local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
 
--- Helper function to extract JWT from request headers and query parameters
+-- Helper function to extract Firebase JWT from request headers and query parameters
 local function extract_jwt_from_request()
     local authorization_value = kong.request.get_header(AUTHORIZATION)
     local proxy_authorization_value = kong.request.get_header(PROXY_AUTHORIZATION)
@@ -144,7 +144,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, nil
     end
 
-    local cache_key = generate_cache_key(config, "backend-jwt")
+    local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
     local cached_jwt, err = cache:get(cache_key)
     if err then
         kong.log.err("Failed to get cached backend JWT: ", err)
@@ -385,11 +385,13 @@ function PubSubHandler:access(config)
         set_consumer(consumer, config)
     end
 
-    -- Fetch JWT from backend service if configured
+    -- Fetch JWT from backend service if configured (skip for anonymous users)
     if config.jwt_service_url then
         local consumer = kong.client.get_consumer()
-        local consumer_id = consumer and consumer.username or config.anonymous
-        local backend_jwt, err = fetch_jwt_from_backend(config, consumer_id)
+        if not consumer or consumer.username == config.anonymous then
+            return
+        end
+        local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username)
 
         if backend_jwt then
             kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
