@@ -49,7 +49,7 @@ function PubSubHandler:access(config)
         return
     end
 
-    -- Validate Firebase JWT from authorization header
+    -- Validate Firebase JWT from authorization header (present for frontend requests)
     local ok, jwt_token_or_err = firebase.validate_jwt(config)
 
     if not ok then

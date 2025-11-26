@@ -77,6 +77,8 @@ services:
             - name: aud
               allowed_values:
                 - "google-project-id-here"
+          jwt_service_url: http://midtier-api.default.svc.cluster.local./auth/auth_jwt
+          jwt_service_timeout: 5000
 consumers:
   - username: authenticated-firebase
 ```
