@@ -102,7 +102,7 @@ local function generate_cache_key(config, key)
 end
 
 -- The function we're testing (mirrors cerberus.lua fetch_jwt_from_backend)
-local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
+local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
     local cached_jwt, err = mock_cache:get(cache_key)
     if err then
@@ -120,13 +120,8 @@ local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
     httpc:set_timeout(config.jwt_service_timeout or 5000)
     local start_of_request = os.time()
 
-    -- Get original request headers (mocked)
+    -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
-
-    -- Add the original Firebase JWT token to the request headers
-    if firebase_jwt then
-        original_headers["x-original-jwt"] = firebase_jwt
-    end
 
     local res, err = httpc:request_uri(config.jwt_service_url, {
         method = "GET",
@@ -162,7 +157,7 @@ local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
 end
 
 -- Function that mirrors cerberus.set_cerberus_jwt_header
-local function set_cerberus_jwt_header(config, firebase_jwt)
+local function set_cerberus_jwt_header(config)
     if not config.jwt_service_url then
         return nil, nil
     end
@@ -172,7 +167,7 @@ local function set_cerberus_jwt_header(config, firebase_jwt)
         return nil, "skipped_anonymous"
     end
 
-    return fetch_jwt_from_backend(config, consumer.username, firebase_jwt)
+    return fetch_jwt_from_backend(config, consumer.username)
 end
 
 -- Simple test framework
@@ -232,35 +227,35 @@ print("")
 run_test("Returns nil when jwt_service_url is not configured", function()
     local config = {}
     mock_consumer = { username = "test-consumer" }
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "JWT should be nil")
     assert_nil(err, "Error should be nil")
 end)
 
 run_test("Skips anonymous users", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         anonymous = "anonymous-user",
     }
     mock_consumer = { username = "anonymous-user" }
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "JWT should be nil for anonymous")
     assert_equals("skipped_anonymous", err, "Should return skipped_anonymous")
 end)
 
 run_test("Skips when no consumer", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
     }
     mock_consumer = nil
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "JWT should be nil when no consumer")
     assert_equals("skipped_anonymous", err, "Should return skipped_anonymous")
 end)
 
 run_test("Returns cached JWT when available", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
@@ -268,26 +263,26 @@ run_test("Returns cached JWT when available", function()
     -- Pre-populate cache with the correct key format
     mock_cache:store("remote-jwt-auth:test:backend-jwt:test-consumer", "cached-jwt-token", os.time() + 300)
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_equals("cached-jwt-token", jwt, "Should return cached JWT")
     assert_nil(err, "Should not return error")
 end)
 
 run_test("Fetches JWT from backend service successfully", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         jwt_service_timeout = 5000,
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
 
     -- Mock successful HTTP response (GET returning JWT string)
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
         body = "new-cerberus-jwt-token",
     })
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_equals("new-cerberus-jwt-token", jwt, "Should return new JWT")
     assert_nil(err, "Should not return error")
 
@@ -296,84 +291,84 @@ run_test("Fetches JWT from backend service successfully", function()
     assert_equals("new-cerberus-jwt-token", cached_jwt, "JWT should be cached")
 end)
 
-run_test("Passes firebase_jwt in x-original-jwt header", function()
+run_test("Passes original headers to backend", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
-    mock_request_headers = { ["user-agent"] = "test-client" }
+    mock_request_headers = { ["user-agent"] = "test-client", ["authorization"] = "Bearer firebase-jwt" }
 
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
-        body = "jwt-with-firebase-context",
+        body = "jwt-with-original-headers",
     })
 
-    local jwt, err = set_cerberus_jwt_header(config, "my-firebase-jwt-token")
-    assert_equals("jwt-with-firebase-context", jwt, "Should return JWT")
+    local jwt, err = set_cerberus_jwt_header(config)
+    assert_equals("jwt-with-original-headers", jwt, "Should return JWT")
     assert_nil(err, "Should not return error")
 end)
 
 run_test("Handles HTTP connection failure", function()
     local config = {
-        jwt_service_url = "http://unreachable.com/jwt",
+        jwt_service_url = "http://not-midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "Should return nil JWT on connection failure")
     assert_equals("Connection failed", err, "Should return connection error")
 end)
 
 run_test("Handles non-200 HTTP status", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
 
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 500,
         body = "Internal Server Error",
     })
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "Should return nil JWT on server error")
     assert_equals("Backend service error: 500", err, "Should return server error")
 end)
 
 run_test("Handles empty response body", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
     mock_consumer = { username = "test-consumer" }
 
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
         body = "",
     })
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_nil(jwt, "Should return nil when response is empty")
     assert_equals("Missing JWT token in response", err, "Should return missing token error")
 end)
 
 run_test("Uses per-user cache keys", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
     }
 
     -- Set up for user1
     mock_consumer = { username = "user1" }
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
         body = "user1-jwt-token",
     })
 
-    local jwt1, _ = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt1, _ = set_cerberus_jwt_header(config)
     assert_equals("user1-jwt-token", jwt1, "Should return user1 JWT")
 
     -- Clear HTTP mocks but keep cache
@@ -381,12 +376,12 @@ run_test("Uses per-user cache keys", function()
 
     -- Set up for user2
     mock_consumer = { username = "user2" }
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
         body = "user2-jwt-token",
     })
 
-    local jwt2, _ = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt2, _ = set_cerberus_jwt_header(config)
     assert_equals("user2-jwt-token", jwt2, "Should return user2 JWT (not cached user1)")
 
     -- Verify both are cached separately
@@ -398,18 +393,18 @@ end)
 
 run_test("Uses default timeout when not specified", function()
     local config = {
-        jwt_service_url = "http://backend.com/jwt",
+        jwt_service_url = "http://midtier:80/auth/auth_jwt",
         cache_namespace = "test",
         -- jwt_service_timeout not specified, should use default 5000
     }
     mock_consumer = { username = "test-consumer" }
 
-    set_mock_response("http://backend.com/jwt", {
+    set_mock_response("http://midtier:80/auth/auth_jwt", {
         status = 200,
         body = "default-timeout-jwt",
     })
 
-    local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+    local jwt, err = set_cerberus_jwt_header(config)
     assert_equals("default-timeout-jwt", jwt, "Should return JWT with default timeout")
     assert_nil(err, "Should not return error")
 end)

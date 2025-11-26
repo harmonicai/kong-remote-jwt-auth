@@ -75,7 +75,7 @@ function PubSubHandler:access(config)
         set_consumer(consumer, config)
 
         -- Fetch Cerberus JWT from backend service (only for authenticated users)
-        cerberus.set_cerberus_jwt_header(config, jwt_token_or_err)
+        cerberus.set_cerberus_jwt_header(config)
     end
 end
 

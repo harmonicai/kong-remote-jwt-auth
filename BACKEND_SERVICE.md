@@ -22,21 +22,19 @@ Your backend service should provide a simple GET endpoint:
 
 ### Request Format
 
-The plugin makes a simple GET request to your configured endpoint with **all original request headers forwarded**, plus an additional header containing the validated Firebase JWT:
+The plugin makes a simple GET request to your configured endpoint with **all original request headers forwarded**:
 
 ```bash
 GET /your-jwt-endpoint HTTP/1.1
 Host: your-backend.com
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Proxy-Authorization: Bearer another-jwt-token
-X-Original-JWT: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...  # <-- Added by plugin
 User-Agent: kong-http-client/1.0
 X-Forwarded-For: 192.168.1.100
 # ... all other original request headers
 ```
 
 **Header forwarding**: All original request headers are automatically passed to your backend service, including:
-- `X-Original-JWT` header containing the **validated Firebase JWT** (added by the plugin)
 - `Authorization` and `Proxy-Authorization` headers (containing JWTs)
 - Custom headers from the client
 - Kong-added headers (X-Forwarded-*, etc.)
@@ -92,7 +90,7 @@ plugins:
 2. **Consumer Check**: Verifies user is not anonymous (anonymous users skip backend call)
 3. **Backend Call**: If validation succeeds and `jwt_service_url` is configured:
    - Makes GET request to your backend service
-   - Passes through all original headers plus `X-Original-JWT` with the validated Firebase JWT
+   - Passes through all original headers (including `Authorization` with the validated JWT)
    - Caches the response JWT per-user
 4. **Header Setting**: Sets `x-harmonic-cerberus-jwt` header with the fetched JWT
 5. **Request Forwarding**: Original request continues to your upstream service
@@ -114,11 +112,11 @@ Here's a simple example of what your backend service might look like:
 
 ```javascript
 app.get('/get-jwt', (req, res) => {
-  // The validated Firebase JWT is passed in x-original-jwt header
-  const firebaseJWT = req.headers['x-original-jwt'];
+  // The validated Firebase JWT is in the Authorization header
+  const authHeader = req.headers.authorization;
+  const firebaseJWT = authHeader?.replace(/^Bearer /i, '');
 
-  // Your service also has access to ALL original request headers
-  const originalAuth = req.headers.authorization;
+  // Your service has access to ALL original request headers
   const proxyAuth = req.headers['proxy-authorization'];
   const userAgent = req.headers['user-agent'];
   const customHeader = req.headers['x-custom-client-id'];
@@ -129,7 +127,6 @@ app.get('/get-jwt', (req, res) => {
   // Generate/fetch JWT based on the Firebase JWT or other headers
   const customJWT = generateCustomJWT({
     firebaseJWT,
-    originalAuth,
     proxyAuth,
     userAgent,
     customHeader
@@ -146,14 +143,13 @@ app.get('/get-jwt', (req, res) => {
 Test your backend service integration:
 
 ```bash
-# Test your backend service directly with the x-original-jwt header
+# Test your backend service directly
 curl -X GET https://your-backend.com/get-jwt \
-  -H "X-Original-JWT: your-validated-firebase-jwt" \
-  -H "Authorization: Bearer your-original-jwt" \
+  -H "Authorization: Bearer your-firebase-jwt" \
   -H "X-Custom-Client-ID: client-123" \
   -H "User-Agent: MyApp/1.0"
 
-# Your backend will receive ALL these headers including x-original-jwt
+# Your backend will receive ALL these headers
 
 # Expected response (just the JWT string):
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c

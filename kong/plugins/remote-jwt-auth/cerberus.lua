@@ -14,7 +14,7 @@ local function generate_cache_key(config, key)
     return "remote-jwt-auth:" .. to_hex(digest:final())
 end
 
-local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
+local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
     local cached_jwt, err = cache:get(cache_key)
     if err then
@@ -34,11 +34,6 @@ local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
 
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
-
-    -- Add the original Firebase JWT token to the request headers for the backend service
-    if firebase_jwt then
-        original_headers["x-original-jwt"] = firebase_jwt
-    end
 
     -- Log the request details
     kong.log.notice("Making request to JWT backend service:")
@@ -102,8 +97,7 @@ end
 -- Fetch Cerberus JWT from backend and set in header
 -- Skips if user is anonymous or jwt_service_url is not configured
 -- @param config Plugin configuration
--- @param firebase_jwt The validated Firebase JWT token to pass to backend
-function _M.set_cerberus_jwt_header(config, firebase_jwt)
+function _M.set_cerberus_jwt_header(config)
     if not config.jwt_service_url then
         return
     end
@@ -113,7 +107,7 @@ function _M.set_cerberus_jwt_header(config, firebase_jwt)
         return
     end
 
-    local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username, firebase_jwt)
+    local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username)
 
     if backend_jwt then
         kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)

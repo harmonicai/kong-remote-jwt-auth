@@ -92,7 +92,7 @@ local function generate_cache_key(config, key)
     return "remote-jwt-auth:" .. config.cache_namespace .. ":" .. key
 end
 
-local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
+local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
     local cached_jwt, err = cache:get(cache_key)
     if err then
@@ -112,11 +112,6 @@ local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
 
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
-
-    -- Add the original Firebase JWT token to the request headers
-    if firebase_jwt then
-        original_headers["x-original-jwt"] = firebase_jwt
-    end
 
     local res, err = httpc:request_uri(config.jwt_service_url, {
         method = "GET",
@@ -151,7 +146,7 @@ local function fetch_jwt_from_backend(config, consumer_id, firebase_jwt)
     return response_jwt, nil
 end
 
-local function set_cerberus_jwt_header(config, firebase_jwt)
+local function set_cerberus_jwt_header(config)
     if not config.jwt_service_url then
         return nil, nil
     end
@@ -161,7 +156,7 @@ local function set_cerberus_jwt_header(config, firebase_jwt)
         return nil, "skipped_anonymous"
     end
 
-    return fetch_jwt_from_backend(config, consumer.username, firebase_jwt)
+    return fetch_jwt_from_backend(config, consumer.username)
 end
 
 return {
@@ -187,7 +182,7 @@ describe("Cerberus JWT Fetching", function()
         it("returns nil when jwt_service_url is not configured", function()
             local config = {}
             mock_consumer = { username = "test-consumer" }
-            local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+            local jwt, err = set_cerberus_jwt_header(config)
             assert.is_nil(jwt)
             assert.is_nil(err)
         end)
@@ -199,7 +194,7 @@ describe("Cerberus JWT Fetching", function()
                 anonymous = "anonymous-user",
             }
             mock_consumer = { username = "anonymous-user" }
-            local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+            local jwt, err = set_cerberus_jwt_header(config)
             assert.is_nil(jwt)
             assert.equals("skipped_anonymous", err)
         end)
@@ -210,7 +205,7 @@ describe("Cerberus JWT Fetching", function()
                 cache_namespace = "test",
             }
             mock_consumer = nil
-            local jwt, err = set_cerberus_jwt_header(config, "firebase-token")
+            local jwt, err = set_cerberus_jwt_header(config)
             assert.is_nil(jwt)
             assert.equals("skipped_anonymous", err)
         end)
@@ -226,7 +221,7 @@ describe("Cerberus JWT Fetching", function()
             -- Pre-populate cache
             mock_cache:store("remote-jwt-auth:test:backend-jwt:test-consumer", "cached-jwt-token", os.time() + 300)
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.equals("cached-jwt-token", jwt)
             assert.is_nil(err)
         end)
@@ -245,7 +240,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "new-cerberus-jwt-token",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.equals("new-cerberus-jwt-token", jwt)
             assert.is_nil(err)
 
@@ -254,7 +249,7 @@ describe("Cerberus JWT Fetching", function()
             assert.equals("new-cerberus-jwt-token", cached_jwt)
         end)
 
-        it("passes firebase_jwt in x-original-jwt header", function()
+        it("passes original headers to backend", function()
             local config = {
                 jwt_service_url = "http://midtier:80/auth/auth_jwt",
                 cache_namespace = "test",
@@ -266,7 +261,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "jwt-with-context",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "my-firebase-jwt")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.equals("jwt-with-context", jwt)
             assert.is_nil(err)
         end)
@@ -277,7 +272,7 @@ describe("Cerberus JWT Fetching", function()
                 cache_namespace = "test",
             }
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.is_nil(jwt)
             assert.equals("Connection failed", err)
             assert.matches("Request for backend JWT failed", kong_log_messages[1])
@@ -294,7 +289,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "Internal Server Error",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.is_nil(jwt)
             assert.equals("Backend service error: 500", err)
             assert.matches("Backend JWT service returned non%-200 status", kong_log_messages[1])
@@ -311,7 +306,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.is_nil(jwt)
             assert.equals("Missing JWT token in response", err)
             assert.matches("Backend JWT service response missing JWT token", kong_log_messages[1])
@@ -329,7 +324,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "user1-jwt-token",
             })
 
-            local jwt1, err1 = fetch_jwt_from_backend(config, "user1", "firebase-token")
+            local jwt1, err1 = fetch_jwt_from_backend(config, "user1")
             assert.equals("user1-jwt-token", jwt1)
             assert.is_nil(err1)
 
@@ -342,7 +337,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "user2-jwt-token",
             })
 
-            local jwt2, err2 = fetch_jwt_from_backend(config, "user2", "firebase-token")
+            local jwt2, err2 = fetch_jwt_from_backend(config, "user2")
             assert.equals("user2-jwt-token", jwt2)
             assert.is_nil(err2)
 
@@ -365,7 +360,7 @@ describe("Cerberus JWT Fetching", function()
                 body = "default-timeout-jwt",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.equals("default-timeout-jwt", jwt)
             assert.is_nil(err)
         end)
@@ -381,29 +376,13 @@ describe("Cerberus JWT Fetching", function()
                 body = "default-ttl-jwt",
             })
 
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", "firebase-token")
+            local jwt, err = fetch_jwt_from_backend(config, "test-consumer")
             assert.equals("default-ttl-jwt", jwt)
             assert.is_nil(err)
 
             -- JWT should be cached
             local cached_jwt = mock_cache:get("remote-jwt-auth:test:backend-jwt:test-consumer")
             assert.equals("default-ttl-jwt", cached_jwt)
-        end)
-
-        it("handles nil firebase_jwt gracefully", function()
-            local config = {
-                jwt_service_url = "http://midtier:80/auth/auth_jwt",
-                cache_namespace = "test",
-            }
-
-            mock_http.set_mock_response("http://midtier:80/auth/auth_jwt", {
-                status = 200,
-                body = "jwt-without-firebase",
-            })
-
-            local jwt, err = fetch_jwt_from_backend(config, "test-consumer", nil)
-            assert.equals("jwt-without-firebase", jwt)
-            assert.is_nil(err)
         end)
     end)
 end)

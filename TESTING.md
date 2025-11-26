@@ -161,7 +161,7 @@ luarocks install lua-cjson
 - ✅ Skips when no consumer is present
 - ✅ Returns cached JWT when available
 - ✅ Fetches JWT from backend service successfully
-- ✅ Passes firebase_jwt in x-original-jwt header
+- ✅ Passes original headers to backend
 - ✅ Handles HTTP connection failures
 - ✅ Handles non-200 HTTP status codes
 - ✅ Handles empty response body
