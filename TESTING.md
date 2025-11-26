@@ -7,14 +7,11 @@ This document describes how to test the Kong Remote JWT Auth Plugin.
 ```
 spec/
 ├── unit/                              # Unit tests (no Kong dependencies)
-│   ├── 01-backend-jwt-fetch_spec.lua  # Cerberus JWT fetching tests (busted)
-│   └── simple-backend-jwt-test.lua    # Standalone tests (no dependencies)
+│   └── simple-backend-jwt-test.lua    # Standalone tests (runs with luajit only)
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 02-plugin-integration_spec.lua # Full plugin integration tests
 │   └── 03-schema_spec.lua             # Schema validation tests
-├── fixtures/                          # Test utilities
-│   └── mock-jwt-backend.lua           # Mock backend JWT service
-└── run-tests.sh                       # Test runner script
+└── setup-manual-test.sh               # Setup script for manual testing in Pongo shell
 ```
 
 ---
@@ -106,7 +103,14 @@ These disable unnecessary services to speed up test startup.
 
 ### Standalone Unit Tests
 
-No dependencies required except LuaJIT:
+Requires LuaJIT:
+
+```bash
+# macOS
+brew install luajit
+```
+
+Run the tests:
 
 ```bash
 # Run standalone tests
@@ -131,23 +135,6 @@ Expected output:
 📈 Total:  25
 
 🎉 All tests passed!
-```
-
-### Unit Tests with Busted
-
-```bash
-# Install dependencies
-brew install luajit luarocks
-luarocks config lua_version 5.1
-luarocks config lua_interpreter luajit
-luarocks install busted
-luarocks install lua-cjson
-
-# Run unit tests
-~/.luarocks/bin/busted spec/unit/ --verbose
-
-# Or use the test runner
-./spec/run-tests.sh
 ```
 
 ---
@@ -196,39 +183,32 @@ Note: Integration tests use Kong's `http_mock` helper to create mock upstream se
 
 ---
 
-## Manual Testing
+## Manual Testing (via Pongo shell)
 
-### Start Mock Backend Server
-
-```bash
-# Start on default port 9999
-luajit spec/fixtures/mock-jwt-backend.lua
-
-# Or specify custom port
-luajit spec/fixtures/mock-jwt-backend.lua 8080
-```
-
-### Test Backend Service
-
-```bash
-# Simple GET request
-curl -X GET http://localhost:9999/get-jwt
-
-# Response is the JWT string
-# eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
-```
-
-### Test with Kong (via Pongo shell)
+Pongo shell provides a full Kong environment for manual testing:
 
 ```bash
 # Start Pongo shell
 pongo shell
 
-# Inside the shell, you can test Kong directly
-curl -i http://localhost:8000/test -H "Authorization: Bearer your-jwt-token"
+# Start Kong with migrations (inside the shell)
+kms
 
-# Check admin API
-curl -i http://localhost:8001/plugins
+# Run the setup script (inside the shell)
+# Without jwt_service_url:
+bash /kong-plugin/spec/setup-manual-test.sh
+
+# Or with jwt_service_url (assuming you have midtier running locally):
+bash /kong-plugin/spec/setup-manual-test.sh --jwt-service-url http://midtier:80/auth/auth_jwt
+
+# Test a request (will fall back to anonymous with invalid JWT)
+curl -i http://localhost:8000/test -H "Authorization: Bearer test-token"
+
+# View Kong logs
+tail -f /usr/local/kong/logs/error.log
+
+# Check plugin config
+curl -s http://localhost:8001/plugins | jq
 ```
 
 ---
@@ -265,7 +245,7 @@ jobs:
 set -e
 
 # Run unit tests
-./spec/run-tests.sh
+luajit spec/unit/simple-backend-jwt-test.lua
 
 # Run integration tests with Pongo (if available)
 if command -v pongo &> /dev/null; then
@@ -290,18 +270,7 @@ fi
    sudo systemctl start docker
    ```
 
-3. **"busted using wrong Lua version"**
-   ```bash
-   # Use the LuaJIT version of busted
-   ~/.luarocks/bin/busted spec/unit/ --verbose
-   ```
-
-4. **"module 'cjson' not found"**
-   ```bash
-   luarocks install lua-cjson
-   ```
-
-5. **Pongo build fails**
+3. **Pongo build fails**
    ```bash
    # Clean up and rebuild
    pongo down
