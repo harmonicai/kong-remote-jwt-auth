@@ -1,0 +1,4 @@
+--no-cassandra
+--no-redis
+--no-grpcbin
+--no-squid

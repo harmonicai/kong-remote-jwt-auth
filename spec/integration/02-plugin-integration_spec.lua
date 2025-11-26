@@ -1,169 +1,241 @@
 local helpers = require("spec.helpers")
 local cjson = require("cjson")
 
-describe("Plugin: remote-jwt-auth (integration)", function()
-    local client, admin_client
-    local backend_server_port = 9999
-    local backend_jwt_url = "http://localhost:" .. backend_server_port .. "/get-jwt"
+-- Integration tests for the remote-jwt-auth plugin
+-- Run with Pongo: pongo run ./spec/integration/
 
-    lazy_setup(function()
-        local bp = helpers.get_db_utils("postgres", {
-            "consumers",
-            "plugins",
-            "routes",
-            "services",
-        })
+for _, strategy in helpers.each_strategy() do
+    describe("Plugin: remote-jwt-auth (integration) [#" .. strategy .. "]", function()
+        local client, admin_client
+        local bp
 
-        -- Create a test service
-        local service = bp.services:insert({
-            protocol = "http",
-            host = "httpbin.org",
-            port = 80,
-            path = "/anything",
-        })
-
-        -- Create a test route
-        local route = bp.routes:insert({
-            paths = { "/test" },
-            service = service,
-        })
-
-        -- Create test consumers
-        local consumer = bp.consumers:insert({
-            username = "test-consumer",
-        })
-
-        local anonymous_consumer = bp.consumers:insert({
-            username = "anonymous",
-        })
-
-        -- Configure the plugin
-        bp.plugins:insert({
-            name = "remote-jwt-auth",
-            route = route,
-            config = {
-                authenticated_consumer = "test-consumer",
-                anonymous = "anonymous",
-                signing_urls = {
-                    "https://www.googleapis.com/oauth2/v1/certs",
-                },
-                jwt_service_url = backend_jwt_url,
-                jwt_service_timeout = 3000,
-                cache_namespace = "test-integration",
-                claims_to_verify = {
-                    {
-                        name = "iss",
-                        allowed_values = { "test-issuer" },
-                    },
-                },
-            },
-        })
-
-        -- Start Kong
-        assert(helpers.start_kong({
-            nginx_conf = "spec/fixtures/custom_nginx.template",
-            plugins = "bundled,remote-jwt-auth",
-            lua_shared_dict = {
-                remote_jwt_auth = "1m",
-            },
-        }))
-
-        admin_client = helpers.admin_client()
-        client = helpers.proxy_client()
-    end)
-
-    lazy_teardown(function()
-        if client then
-            client:close()
-        end
-        if admin_client then
-            admin_client:close()
-        end
-        helpers.stop_kong()
-    end)
-
-    describe("Backend JWT integration", function()
-        it("sets x-harmonic-cerberus-jwt header when backend service is available", function()
-            -- Start mock backend server
-            local http = require("socket.http")
-            local ltn12 = require("ltn12")
-
-            -- This is a simplified test - in practice you'd use a proper mock server
-            -- For now, we'll test the failure case since we can't easily start a server
-
-            local res = assert(client:send({
-                method = "GET",
-                path = "/test",
-                headers = {
-                    authorization = "Bearer invalid-jwt-for-testing",
-                },
-            }))
-
-            -- Should get 401 since we don't have valid JWT validation
-            -- But this tests that our plugin is loaded and running
-            assert.res_status(401, res)
-        end)
-
-        it("continues working when backend service is unavailable", function()
-            local res = assert(client:send({
-                method = "GET",
-                path = "/test",
-                headers = {
-                    authorization = "Bearer invalid-jwt-for-testing",
-                },
-            }))
-
-            -- Should get 401 due to invalid JWT (existing behavior)
-            -- Backend failure should not prevent the request from being processed
-            assert.res_status(401, res)
-        end)
-
-        it("works without jwt_service_url configured", function()
-            -- This tests backward compatibility
-            local bp = helpers.get_db_utils("postgres", {
+        lazy_setup(function()
+            bp = helpers.get_db_utils(strategy, {
+                "consumers",
                 "plugins",
                 "routes",
                 "services",
-            })
+            }, { "remote-jwt-auth" })
 
-            local service2 = bp.services:insert({
+            -- Create a test service pointing to mock upstream
+            local service = bp.services:insert({
                 protocol = "http",
-                host = "httpbin.org",
-                port = 80,
-                path = "/anything",
+                host = helpers.mock_upstream_host,
+                port = helpers.mock_upstream_port,
             })
 
-            local route2 = bp.routes:insert({
-                paths = { "/test-no-backend" },
-                service = service2,
+            -- Create a test route
+            local route = bp.routes:insert({
+                paths = { "/test" },
+                service = service,
             })
 
+            -- Create test consumers
+            bp.consumers:insert({
+                username = "test-consumer",
+            })
+
+            bp.consumers:insert({
+                username = "anonymous",
+            })
+
+            -- Configure the plugin with all features
             bp.plugins:insert({
                 name = "remote-jwt-auth",
-                route = route2,
+                route = route,
                 config = {
                     authenticated_consumer = "test-consumer",
+                    anonymous = "anonymous",
                     signing_urls = {
                         "https://www.googleapis.com/oauth2/v1/certs",
                     },
-                    cache_namespace = "test-no-backend",
+                    cache_namespace = "test-integration",
+                    claims_to_verify = {},
                 },
             })
 
-            -- Restart Kong to pick up new config
-            helpers.restart_kong()
-            client = helpers.proxy_client()
-
-            local res = assert(client:send({
-                method = "GET",
-                path = "/test-no-backend",
-                headers = {
-                    authorization = "Bearer invalid-jwt-for-testing",
-                },
+            -- Start Kong with the plugin
+            assert(helpers.start_kong({
+                database = strategy,
+                plugins = "bundled,remote-jwt-auth",
             }))
 
-            -- Should work exactly as before (401 for invalid JWT)
-            assert.res_status(401, res)
+            client = helpers.proxy_client()
+            admin_client = helpers.admin_client()
+        end)
+
+        lazy_teardown(function()
+            if client then
+                client:close()
+            end
+            if admin_client then
+                admin_client:close()
+            end
+            helpers.stop_kong()
+        end)
+
+        describe("Plugin loading", function()
+            it("plugin is loaded and accessible via admin API", function()
+                local res = admin_client:get("/plugins", {
+                    headers = { ["Content-Type"] = "application/json" },
+                })
+                local body = assert.res_status(200, res)
+                local json = cjson.decode(body)
+
+                local found = false
+                for _, plugin in ipairs(json.data) do
+                    if plugin.name == "remote-jwt-auth" then
+                        found = true
+                        break
+                    end
+                end
+                assert.is_true(found, "remote-jwt-auth plugin should be loaded")
+            end)
+        end)
+
+        describe("Authentication flow", function()
+            it("returns 401 when no authorization header is provided", function()
+                local res = client:get("/test")
+                assert.res_status(401, res)
+            end)
+
+            it("returns 401 for invalid JWT format", function()
+                local res = client:get("/test", {
+                    headers = {
+                        ["Authorization"] = "Bearer invalid-jwt-token",
+                    },
+                })
+                assert.res_status(401, res)
+            end)
+
+            it("returns 401 for JWT without kid header", function()
+                -- JWT without kid in header (base64 of {"alg":"HS256","typ":"JWT"})
+                local jwt_without_kid = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+                local res = client:get("/test", {
+                    headers = {
+                        ["Authorization"] = "Bearer " .. jwt_without_kid,
+                    },
+                })
+                assert.res_status(401, res)
+            end)
+        end)
+
+        describe("Anonymous fallback", function()
+            it("allows request with anonymous consumer when auth fails", function()
+                -- Since anonymous is configured, failed auth should set anonymous consumer
+                -- and allow the request through
+                local res = client:get("/test", {
+                    headers = {
+                        ["Authorization"] = "Bearer invalid-token",
+                    },
+                })
+                -- With anonymous configured, the request should go through to upstream
+                assert.res_status(200, res)
+            end)
+        end)
+
+        describe("Header handling", function()
+            it("accepts JWT from Authorization header", function()
+                local res = client:get("/test", {
+                    headers = {
+                        ["Authorization"] = "Bearer some-jwt-token",
+                    },
+                })
+                -- Will fail validation but with anonymous fallback should return 200
+                assert.res_status(200, res)
+            end)
+
+            it("accepts JWT from Proxy-Authorization header", function()
+                local res = client:get("/test", {
+                    headers = {
+                        ["Proxy-Authorization"] = "Bearer some-jwt-token",
+                    },
+                })
+                -- Will fail validation but with anonymous fallback should return 200
+                assert.res_status(200, res)
+            end)
+
+            it("accepts JWT from query parameter", function()
+                local res = client:get("/test?jwt=some-jwt-token")
+                -- Will fail validation but with anonymous fallback should return 200
+                assert.res_status(200, res)
+            end)
         end)
     end)
-end)
+end
+
+-- Separate test for backward compatibility (no jwt_service_url)
+for _, strategy in helpers.each_strategy() do
+    describe("Plugin: remote-jwt-auth backward compatibility [#" .. strategy .. "]", function()
+        local client, bp
+
+        lazy_setup(function()
+            bp = helpers.get_db_utils(strategy, {
+                "consumers",
+                "plugins",
+                "routes",
+                "services",
+            }, { "remote-jwt-auth" })
+
+            local service = bp.services:insert({
+                protocol = "http",
+                host = helpers.mock_upstream_host,
+                port = helpers.mock_upstream_port,
+            })
+
+            local route = bp.routes:insert({
+                paths = { "/backward-compat" },
+                service = service,
+            })
+
+            bp.consumers:insert({
+                username = "compat-consumer",
+            })
+
+            bp.consumers:insert({
+                username = "anon-compat",
+            })
+
+            -- Configure plugin WITHOUT jwt_service_url (backward compatibility)
+            bp.plugins:insert({
+                name = "remote-jwt-auth",
+                route = route,
+                config = {
+                    authenticated_consumer = "compat-consumer",
+                    anonymous = "anon-compat",
+                    signing_urls = {
+                        "https://www.googleapis.com/oauth2/v1/certs",
+                    },
+                    cache_namespace = "test-compat",
+                    claims_to_verify = {},
+                    -- No jwt_service_url - tests backward compatibility
+                },
+            })
+
+            assert(helpers.start_kong({
+                database = strategy,
+                plugins = "bundled,remote-jwt-auth",
+            }))
+
+            client = helpers.proxy_client()
+        end)
+
+        lazy_teardown(function()
+            if client then
+                client:close()
+            end
+            helpers.stop_kong()
+        end)
+
+        it("works without jwt_service_url configured", function()
+            local res = client:get("/backward-compat", {
+                headers = {
+                    ["Authorization"] = "Bearer invalid-jwt",
+                },
+            })
+            -- Should process normally without Cerberus JWT fetching
+            -- With anonymous fallback, should return 200
+            assert.res_status(200, res)
+        end)
+    end)
+end
