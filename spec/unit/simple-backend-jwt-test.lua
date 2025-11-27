@@ -64,16 +64,16 @@ local mock_consumer = nil
 local mock_kong = {
     log = {
         err = function(...)
-            local args = {...}
+            local args = { ... }
             local msg = table.concat(args, "")
             table.insert(kong_log_messages, "ERR: " .. msg)
         end,
         warn = function(...)
-            local args = {...}
+            local args = { ... }
             local msg = table.concat(args, "")
             table.insert(kong_log_messages, "WARN: " .. msg)
         end,
-        notice = function(...) end,  -- Suppress notice logs in tests
+        notice = function(...) end, -- Suppress notice logs in tests
     },
     request = {
         get_headers = function()
