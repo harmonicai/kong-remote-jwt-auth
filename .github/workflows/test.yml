@@ -1,0 +1,72 @@
+name: Kong Remote JWT Auth Plugin Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install LuaJIT
+        uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "luajit-2.1"
+
+      - name: Run unit tests
+        run: luajit spec/unit/simple-backend-jwt-test.lua
+
+  integration-tests:
+    name: Integration Tests (Kong ${{ matrix.kong_version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kong_version:
+          - "3.0.x"
+          # Add more versions as needed:
+          # - "3.4.x"
+          # - "3.9.x"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pongo
+        uses: Kong/kong-pongo-action@v1
+        with:
+          kong_version: ${{ matrix.kong_version }}
+
+      - name: Run integration tests
+        env:
+          KONG_VERSION: ${{ matrix.kong_version }}
+        run: pongo run
+
+  schema-tests:
+    name: Schema Tests (Kong ${{ matrix.kong_version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kong_version:
+          - "3.0.x"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pongo
+        uses: Kong/kong-pongo-action@v1
+        with:
+          kong_version: ${{ matrix.kong_version }}
+
+      - name: Run schema tests
+        env:
+          KONG_VERSION: ${{ matrix.kong_version }}
+        run: pongo run spec/integration/02-schema_spec.lua
