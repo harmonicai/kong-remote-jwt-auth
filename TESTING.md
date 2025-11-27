@@ -9,8 +9,8 @@ spec/
 ├── unit/                              # Unit tests (no Kong dependencies)
 │   └── simple-backend-jwt-test.lua    # Standalone tests (runs with luajit only)
 ├── integration/                       # Integration tests (requires Kong/Pongo)
-│   ├── 02-plugin-integration_spec.lua # Full plugin integration tests
-│   └── 03-schema_spec.lua             # Schema validation tests
+│   ├── 01-plugin-integration_spec.lua # Full plugin integration tests
+│   └── 02-schema_spec.lua             # Schema validation tests
 ├── setup-manual-test.sh               # Basic manual testing (no backend)
 ├── setup-mock-test.sh                 # Testing with mock JWT backend
 └── setup-local-backend.sh             # Testing with local midtier/graphql
@@ -20,7 +20,7 @@ spec/
 
 ## Testing with Pongo (Recommended)
 
-[Kong Pongo](https://github.com/Kong/kong-pongo) is the recommended way to run integration tests. It uses Docker to create isolated Kong test environments.
+[Kong Pongo](https://github.com/Kong/kong-pongo) is the recommended way to run integration tests for Kong plugins. It uses Docker to create isolated Kong test environments.
 
 ### Install Pongo
 
@@ -54,8 +54,11 @@ pongo run
 # Run with verbose output for Busted (arguments after the -- separator)
 pongo run -- --verbose
 
-# Run specific test file
-pongo run ./spec/integration/02-plugin-integration_spec.lua
+# Run specific test with verbose output in gtest format
+pongo run -- -v -o gtest ./spec/integration/01-plugin-integration_spec.lua 
+
+# Only run tests tagged with postgres
+pongo run -- --tags=postgres
 
 # Run against a specific Kong version
 KONG_VERSION=3.0.x pongo run
@@ -78,12 +81,6 @@ pongo tail
 
 # Stop and clean up containers
 pongo down
-
-# Run with only PostgreSQL (default)
-pongo run --no-cassandra
-
-# Run with coverage report
-pongo run -- --coverage
 ```
 
 ### Pongo Configuration
@@ -185,7 +182,7 @@ Expected output:
 
 ## Manual Testing (via Pongo shell)
 
-Pongo shell provides a full Kong environment for manual testing. There are three setup scripts available.
+Pongo shell provides a full Kong environment for manual testing (e.g. with sample requests). There are three setup scripts available.
 
 **Important:** The plugin requires a shared dictionary to be configured. You must set this environment variable **before** starting Kong:
 
@@ -305,58 +302,4 @@ curl -s http://localhost:8001/services | jq
 
 ### GitHub Actions with Pongo
 
-Unit and pongo integration tests are run as part of the `.github/workflows/test.yml` Github action.
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"pongo: command not found"**
-   Make sure pongo repository is checked out and exported to path (see installation instructions above)
-   ```bash
-   export PATH="$PATH:~/.local/bin"
-   ```
-
-2. **"Docker not running"**
-   ```bash
-   # Start Docker Desktop/Orbstack or
-   sudo systemctl start docker
-   ```
-
-3. **Pongo build fails**
-   ```bash
-   # Clean up and rebuild
-   pongo down
-   pongo build --force
-   ```
-
-### Debugging Tests
-
-```bash
-# View Kong logs during test
-pongo tail
-
-# Get a shell in the Kong container
-pongo shell
-
-# Run specific test with verbose output in gtest format
-pongo run -- -v -o gtest ./spec/integration/01-plugin-integration_spec.lua 
-
-# Only run tests tagged with postgres
-pongo run -- --tags=postgres
-```
-
----
-
-## Test Coverage
-
-The tests cover:
-
-1. **Functionality**: Firebase JWT validation, Cerberus JWT fetching
-2. **Error Handling**: Network failures, HTTP errors, malformed responses
-3. **Caching**: Per-user JWT caching with TTL
-4. **Security**: Anonymous user skipping, per-user cache isolation
-5. **Compatibility**: Backward compatibility with existing configurations
-6. **Schema**: Validation of configuration fields
+Unit and pongo integration tests are automatically run as part of the `.github/workflows/test.yml` Github action.
