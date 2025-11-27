@@ -300,8 +300,9 @@ jobs:
           ln -s $(realpath kong-pongo/pongo.sh) ~/.local/bin/pongo
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+
       - name: Run tests
-        run: pongo run -- --verbose
+        run: KONG_VERSION=3.0.x pongo run -- --verbose
 ```
 
 ### Local CI Script
@@ -315,7 +316,7 @@ luajit spec/unit/simple-backend-jwt-test.lua
 
 # Run integration tests with Pongo (if available)
 if command -v pongo &> /dev/null; then
-    pongo run -- --verbose
+    KONG_VERSION=3.0.x pongo run -- --verbose
 fi
 ```
 

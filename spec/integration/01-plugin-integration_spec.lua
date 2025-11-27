@@ -3,15 +3,13 @@ local cjson = require("cjson")
 
 -- Integration tests for the remote-jwt-auth plugin
 -- Run with Pongo: pongo run ./spec/integration/
+-- Compatible with Kong 3.0.x+ (using services insert instead of http_mock introduced in kong 3.1.x)
 
--- Mock upstream port
-local MOCK_PORT = 15555
-
-for _, strategy in helpers.each_strategy() do
+-- Only test with postgres (cassandra disabled in pongorc)
+for _, strategy in helpers.each_strategy({ "postgres" }) do
     describe("Plugin: remote-jwt-auth (integration) [#" .. strategy .. "]", function()
         local client, admin_client
         local bp
-        local mock
 
         lazy_setup(function()
             bp = helpers.get_db_utils(strategy, {
@@ -21,21 +19,10 @@ for _, strategy in helpers.each_strategy() do
                 "services",
             }, { "remote-jwt-auth" })
 
-            -- Create mock upstream server
-            local http_mock = require("spec.helpers.http_mock")
-            mock = http_mock.new(MOCK_PORT, [[
-                ngx.status = 200
-                ngx.say('{"status":"ok"}')
-            ]], {
-                prefix = "mock_upstream",
-            })
-            mock:start()
-
-            -- Create a test service pointing to mock upstream
+            -- Create a test service pointing to httpbin (external service)
             local service = bp.services:insert({
-                protocol = "http",
-                host = "127.0.0.1",
-                port = MOCK_PORT,
+                name = "test-service",
+                url = "https://httpbin.konghq.com/anything",
             })
 
             -- Create a test route
@@ -70,9 +57,8 @@ for _, strategy in helpers.each_strategy() do
 
             -- Create a second service/route WITHOUT anonymous fallback for 401 tests
             local service_no_anon = bp.services:insert({
-                protocol = "http",
-                host = "127.0.0.1",
-                port = MOCK_PORT,
+                name = "test-service-no-anon",
+                url = "https://httpbin.konghq.com/anything",
             })
 
             local route_no_anon = bp.routes:insert({
@@ -94,10 +80,11 @@ for _, strategy in helpers.each_strategy() do
                 },
             })
 
-            -- Start Kong with the plugin
+            -- Start Kong with the plugin and shared dict
             assert(helpers.start_kong({
                 database = strategy,
                 plugins = "bundled,remote-jwt-auth",
+                nginx_http_lua_shared_dict = "remote_jwt_auth 1m",
             }))
 
             client = helpers.proxy_client()
@@ -112,9 +99,6 @@ for _, strategy in helpers.each_strategy() do
                 admin_client:close()
             end
             helpers.stop_kong()
-            if mock then
-                mock:stop()
-            end
         end)
 
         describe("Plugin loading", function()
@@ -138,7 +122,6 @@ for _, strategy in helpers.each_strategy() do
 
         describe("Authentication flow", function()
             it("returns 401 when no authorization header is provided and no anonymous configured", function()
-                -- The /test-no-anon route was created in lazy_setup without anonymous
                 local res = client:get("/test-no-anon")
                 assert.res_status(401, res)
             end)
@@ -155,7 +138,6 @@ for _, strategy in helpers.each_strategy() do
 
         describe("Anonymous fallback", function()
             it("allows request through with anonymous consumer when auth fails", function()
-                -- The /test route has anonymous configured
                 local res = client:get("/test", {
                     headers = {
                         ["Authorization"] = "Bearer invalid-token",
@@ -203,12 +185,9 @@ for _, strategy in helpers.each_strategy() do
 end
 
 -- Separate test for backward compatibility (no jwt_service_url)
-local MOCK_PORT_COMPAT = 15556
-
-for _, strategy in helpers.each_strategy() do
+for _, strategy in helpers.each_strategy({ "postgres" }) do
     describe("Plugin: remote-jwt-auth backward compatibility [#" .. strategy .. "]", function()
         local client, bp
-        local mock_compat
 
         lazy_setup(function()
             bp = helpers.get_db_utils(strategy, {
@@ -218,20 +197,9 @@ for _, strategy in helpers.each_strategy() do
                 "services",
             }, { "remote-jwt-auth" })
 
-            -- Create mock upstream server for backward compat tests
-            local http_mock = require("spec.helpers.http_mock")
-            mock_compat = http_mock.new(MOCK_PORT_COMPAT, [[
-                ngx.status = 200
-                ngx.say('{"status":"ok"}')
-            ]], {
-                prefix = "mock_upstream_compat",
-            })
-            mock_compat:start()
-
             local service = bp.services:insert({
-                protocol = "http",
-                host = "127.0.0.1",
-                port = MOCK_PORT_COMPAT,
+                name = "compat-service",
+                url = "https://httpbin.konghq.com/anything",
             })
 
             local route = bp.routes:insert({
@@ -266,6 +234,7 @@ for _, strategy in helpers.each_strategy() do
             assert(helpers.start_kong({
                 database = strategy,
                 plugins = "bundled,remote-jwt-auth",
+                nginx_http_lua_shared_dict = "remote_jwt_auth 1m",
             }))
 
             client = helpers.proxy_client()
@@ -276,9 +245,6 @@ for _, strategy in helpers.each_strategy() do
                 client:close()
             end
             helpers.stop_kong()
-            if mock_compat then
-                mock_compat:stop()
-            end
         end)
 
         it("works without jwt_service_url configured", function()
