@@ -11,7 +11,9 @@ spec/
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 02-plugin-integration_spec.lua # Full plugin integration tests
 │   └── 03-schema_spec.lua             # Schema validation tests
-└── setup-manual-test.sh               # Setup script for manual testing in Pongo shell
+├── setup-manual-test.sh               # Basic manual testing (no backend)
+├── setup-mock-test.sh                 # Testing with mock JWT backend
+└── setup-local-backend.sh             # Testing with local midtier/graphql
 ```
 
 ---
@@ -185,30 +187,94 @@ Note: Integration tests use Kong's `http_mock` helper to create mock upstream se
 
 ## Manual Testing (via Pongo shell)
 
-Pongo shell provides a full Kong environment for manual testing:
+Pongo shell provides a full Kong environment for manual testing. There are three setup scripts available.
+
+**Important:** The plugin requires a shared dictionary to be configured. You must set this environment variable **before** starting Kong:
 
 ```bash
-# Start Pongo shell
-pongo shell
-
-# Start Kong with migrations (inside the shell)
+export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 kms
+```
 
-# Run the setup script (inside the shell)
-# Without jwt_service_url:
+### Option 1: Basic Testing (No Backend)
+
+For testing JWT validation without a backend JWT service:
+
+```bash
+pongo shell
+export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
+kms
 bash /kong-plugin/spec/setup-manual-test.sh
 
-# Or with jwt_service_url (assuming you have midtier running locally):
-bash /kong-plugin/spec/setup-manual-test.sh --jwt-service-url http://midtier:80/auth/auth_jwt
+# Test requests
+curl -i 'http://localhost:8000/test' -H 'Authorization: Bearer test-token'
+```
 
-# Test a request (will fall back to anonymous with invalid JWT)
-curl -i http://localhost:8000/test -H "Authorization: Bearer test-token"
+### Option 2: Mock JWT Backend
 
+For testing the full flow with a mock JWT backend that returns a static JWT:
+
+```bash
+pongo shell
+export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
+kms
+bash /kong-plugin/spec/setup-mock-test.sh
+
+# Test the mock backend directly
+curl -i 'http://localhost:8000/mock-jwt'
+
+# Test through the plugin
+curl -i 'http://localhost:8000/test' -H 'Authorization: Bearer <valid-firebase-jwt>'
+```
+
+### Option 3: Local Backend Services (midtier/graphql)
+
+For testing with your local backend Docker Compose services (uses `host.docker.internal`):
+
+1. Update the backend `settings/definitions.py` for the env name you want to test against (e.g. DEV)
+   to point to your kong-pongo instance (get correct IP from Docker), e.g.
+```
+DEV_CONFIG = BaseConfig(
+   ENV_NAME="DEV",
+...
+   KONG_API_URL="http://192.168.107.3:8001"
+```
+
+```bash
+# 2. Start your backend services (in the backend repo)
+cd ~/workspace/backend
+GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f docker-compose.debug.yml --env-file settings/docker/dev.env up
+
+# 2. Start pongo shell
+pongo shell
+
+# 3. Start Kong with the shared dict configured (inside the shell)
+export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
+kms
+
+# 4. Setup Kong to route to your local Docker midtier/graphql
+bash /kong-plugin/spec/setup-local-backend.sh
+
+# Or specify custom ports if your services use different ports:
+# bash /kong-plugin/spec/setup-local-backend.sh --midtier-port 8080 --graphql-port 4000
+
+# 5. Test requests (requires valid Firebase JWT)
+curl -i 'http://localhost:8000/' -H 'apikey: <apikey>'
+curl -i 'http://localhost:8000/' -H 'Authorization: Bearer <firebase-jwt>'
+curl -i 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>'
+```
+
+### Common Commands
+
+```bash
 # View Kong logs
-tail -f /usr/local/kong/logs/error.log
+tail -f /kong-plugin/servroot/logs/error.log
 
 # Check plugin config
 curl -s http://localhost:8001/plugins | jq
+
+# Check services
+curl -s http://localhost:8001/services | jq
 ```
 
 ---
