@@ -264,6 +264,27 @@ curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authoriz
 curl -i -X POST 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>' -H 'Content-Type: application/json' -d '{"query": "{ __typename }"}'
 ```
 
+Notes:
+
+- The easiest way to verify backend behaviour with the Cerberus JWT is to add debug breakpoints in the backend `services/midtier/middlewares/header_middleware.py` file (`_get_authenticated_request_state` method)
+- If you see permissions errors, the API key may need to be added to the backend container PG `api_key_permissions` table (need to find the API key ID from kong)
+- Alternatively, force "ALL" permissions for API keys in the backend `kong_service` decorate function:
+```py
+    @trace_fn
+    def __decorate_api_keys(self, kong_api_keys: list[KongApiKey]) -> list[KongApiKey]:
+        # TEMPORARY API KEY DECORATION TO ALLOW LOCAL END-TO-END TESTING
+        # !!! DO NOT COMMIT !!!
+        return [
+            key.copy(
+                update={
+                    "permissions": [Endpoint.ALL],
+                    "request_source": RequestSource.CONSUMER_API,
+                }
+            )
+            for key in kong_api_keys
+        ]
+```
+
 ### Common Commands
 
 ```bash
