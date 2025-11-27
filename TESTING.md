@@ -58,10 +58,10 @@ pongo run -- --verbose
 pongo run ./spec/integration/02-plugin-integration_spec.lua
 
 # Run against a specific Kong version
-KONG_VERSION=3.4.x pongo run
+KONG_VERSION=3.0.x pongo run
 
 # Run against multiple Kong versions
-KONG_VERSION=3.3.x pongo run && KONG_VERSION=3.4.x pongo run
+KONG_VERSION=3.0.x pongo run && KONG_VERSION=3.9.x pongo run
 ```
 
 ### Pongo Commands Reference
@@ -201,7 +201,7 @@ kms
 For testing JWT validation without a backend JWT service:
 
 ```bash
-pongo shell
+KONG_VERSION=3.0.x pongo shell
 export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 kms
 bash /kong-plugin/spec/setup-manual-test.sh
@@ -215,7 +215,7 @@ curl -i 'http://localhost:8000/test' -H 'Authorization: Bearer test-token'
 For testing the full flow with a mock JWT backend that returns a static JWT:
 
 ```bash
-pongo shell
+KONG_VERSION=3.0.x pongo shell
 export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 kms
 bash /kong-plugin/spec/setup-mock-test.sh
@@ -245,8 +245,8 @@ DEV_CONFIG = BaseConfig(
 cd ~/workspace/backend
 GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f docker-compose.debug.yml --env-file settings/docker/dev.env up
 
-# 2. Start pongo shell
-pongo shell
+# 2. Start pongo shell (NOTE: You should specify the kong version you are trying to test against)
+KONG_VERSION=3.0.x pongo shell
 
 # 3. Start Kong with the shared dict configured (inside the shell)
 export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
@@ -261,7 +261,7 @@ bash /kong-plugin/spec/setup-local-backend.sh
 # 5. Test requests (Authorization header requires valid Firebase JWT)
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'apikey: localkey'
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'
-curl -i 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>'
+curl -i -X POST 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>' -H 'Content-Type: application/json' -d '{"query": "{ __typename }"}'
 ```
 
 ### Common Commands

@@ -31,7 +31,7 @@ fi
 
 # Check if midtier is reachable
 echo "Checking connectivity to midtier (host.docker.internal:9000)..."
-MIDTIER_RESPONSE=$(curl -s --connect-timeout 2 http://host.docker.internal:9000/ 2>&1)
+MIDTIER_RESPONSE=$(curl -s --connect-timeout 2 http://host.docker.internal:9000/internals/health 2>&1)
 MIDTIER_EXIT=$?
 if [ $MIDTIER_EXIT -ne 0 ]; then
   echo "Warning: Cannot connect to midtier (host.docker.internal:9000)"
@@ -49,7 +49,9 @@ else
 fi
 
 echo "Checking connectivity to graphql (host.docker.internal:4000)..."
-GRAPHQL_RESPONSE=$(curl -s --connect-timeout 2 http://host.docker.internal:4000/ 2>&1)
+GRAPHQL_RESPONSE=$(curl -s --connect-timeout 2 -X POST http://host.docker.internal:4000 \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ __typename }"}' 2>&1)
 GRAPHQL_EXIT=$?
 if [ $GRAPHQL_EXIT -ne 0 ]; then
   echo "Warning: Cannot connect to graphql (host.docker.internal:4000)"
@@ -190,7 +192,7 @@ echo "  # Test midtier (requires valid Firebase JWT)"
 echo "  curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'"
 echo ""
 echo "  # Test graphql (requires valid Firebase JWT)"
-echo "  curl -i http://localhost:8000/graphql -H 'Authorization: Bearer <firebase-jwt>'"
+echo "  curl -i -X POST 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>' -H 'Content-Type: application/json' -d '{\"query\": \"{ __typename }\"}'"
 echo ""
 echo "  # Request without auth (returns 401)"
 echo "  curl -i http://localhost:8000/"
