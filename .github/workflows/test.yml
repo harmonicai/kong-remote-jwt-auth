@@ -46,27 +46,5 @@ jobs:
       - name: Run integration tests
         env:
           KONG_VERSION: ${{ matrix.kong_version }}
+        # Runs all *_spec.lua files in spec/ directory (includes schema tests)
         run: pongo run
-
-  schema-tests:
-    name: Schema Tests (Kong ${{ matrix.kong_version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        kong_version:
-          - "3.0.x"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Pongo
-        uses: Kong/kong-pongo-action@v1
-        with:
-          kong_version: ${{ matrix.kong_version }}
-
-      - name: Run schema tests
-        env:
-          KONG_VERSION: ${{ matrix.kong_version }}
-        run: pongo run spec/integration/02-schema_spec.lua
