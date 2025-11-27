@@ -47,4 +47,4 @@ jobs:
         env:
           KONG_VERSION: ${{ matrix.kong_version }}
         # Runs all *_spec.lua files in spec/ directory (includes schema tests)
-        run: pongo run
+        run: pongo run -- --verbose
