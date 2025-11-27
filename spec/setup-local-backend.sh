@@ -74,6 +74,14 @@ curl -s -X POST http://localhost:8001/consumers \
 
 curl -s -X POST http://localhost:8001/consumers \
   --data username=anonymous
+
+curl -s -X POST http://localhost:8001/consumers \
+  --data 'username=urn:harmonic:user:999999'
+
+# Add key-auth credential to the test user
+echo "Adding key-auth credential..."
+curl -s -X POST http://localhost:8001/consumers/urn:harmonic:user:999999/key-auth \
+  --data key=localkey
 echo
 
 # Add request-termination plugin to anonymous consumer
@@ -118,6 +126,14 @@ curl -s -X POST http://localhost:8001/services/midtier/plugins \
   }'
 echo
 
+# Enable key-auth on midtier
+echo "Enabling key-auth plugin on midtier..."
+curl -s -X POST http://localhost:8001/services/midtier/plugins \
+  --data name=key-auth \
+  --data config.anonymous=anonymous \
+  --data config.key_in_query=true
+echo
+
 # Create graphql service
 echo "Creating graphql service..."
 curl -s -X POST http://localhost:8001/services \
@@ -149,6 +165,13 @@ curl -s -X POST http://localhost:8001/services/graphql/plugins \
       "jwt_service_timeout": 5000
     }
   }'
+echo
+
+# Enable key-auth on graphql
+echo "Enabling key-auth plugin on graphql..."
+curl -s -X POST http://localhost:8001/services/graphql/plugins \
+  --data name=key-auth \
+  --data config.anonymous=anonymous
 
 echo ""
 echo "Setup complete!"
@@ -156,11 +179,15 @@ echo ""
 echo "Kong is now configured similar to local_kong.yaml with:"
 echo "  - midtier service at / -> http://host.docker.internal:9000"
 echo "  - graphql service at /graphql -> http://host.docker.internal:4000"
-echo "  - remote-jwt-auth plugin with jwt_service_url configured"
+echo "  - remote-jwt-auth and key-auth plugins configured"
+echo "  - Test user: urn:harmonic:user:999999 with apikey 'localkey'"
 echo ""
 echo "Test commands:"
+echo "  # Test with API key (authenticates as urn:harmonic:user:999999)"
+echo "  curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'apikey: localkey'"
+echo ""
 echo "  # Test midtier (requires valid Firebase JWT)"
-echo "  curl -i http://localhost:8000/companies?ids=1354167&extended=true -H 'Authorization: Bearer <firebase-jwt>'"
+echo "  curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'"
 echo ""
 echo "  # Test graphql (requires valid Firebase JWT)"
 echo "  curl -i http://localhost:8000/graphql -H 'Authorization: Bearer <firebase-jwt>'"

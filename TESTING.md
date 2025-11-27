@@ -258,9 +258,9 @@ bash /kong-plugin/spec/setup-local-backend.sh
 # Or specify custom ports if your services use different ports:
 # bash /kong-plugin/spec/setup-local-backend.sh --midtier-port 8080 --graphql-port 4000
 
-# 5. Test requests (requires valid Firebase JWT)
-curl -i 'http://localhost:8000/' -H 'apikey: <apikey>'
-curl -i 'http://localhost:8000/' -H 'Authorization: Bearer <firebase-jwt>'
+# 5. Test requests (Authorization header requires valid Firebase JWT)
+curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'apikey: localkey'
+curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'
 curl -i 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>'
 ```
 
