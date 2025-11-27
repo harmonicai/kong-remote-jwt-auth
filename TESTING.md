@@ -51,7 +51,7 @@ cd kong-remote-jwt-auth
 # Run all tests against default Kong version
 pongo run
 
-# Run with verbose output
+# Run with verbose output for Busted (arguments after the -- separator)
 pongo run -- --verbose
 
 # Run specific test file
@@ -169,8 +169,6 @@ Expected output:
 - ✅ Accepts JWT from query parameter
 - ✅ Backward compatibility without jwt_service_url
 
-Note: Integration tests use Kong's `http_mock` helper to create mock upstream servers.
-
 ### Schema Validation Tests
 
 - ✅ Validates minimal configuration
@@ -268,12 +266,15 @@ Notes:
 
 - The easiest way to verify backend behaviour with the Cerberus JWT is to add debug breakpoints in the backend `services/midtier/middlewares/header_middleware.py` file (`_get_authenticated_request_state` method)
 - If you see permissions errors, the API key may need to be added to the backend container PG `api_key_permissions` table (need to find the API key ID from kong)
-- Alternatively, force "ALL" permissions for API keys in the backend `kong_service` decorate function:
+- Alternatively, force "ALL" permissions for API keys in the backend `services/midtier/services/kong/kong_service.py` `__decorate_api_keys` function:
 ```py
     @trace_fn
     def __decorate_api_keys(self, kong_api_keys: list[KongApiKey]) -> list[KongApiKey]:
-        # TEMPORARY API KEY DECORATION TO ALLOW LOCAL END-TO-END TESTING
-        # !!! DO NOT COMMIT !!!
+        # TEMPORARY API KEY DECORATION TO ALLOW LOCAL KONG TESTING
+        #
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # !!! DO NOT COMMIT - GRANT ALL PERMISSIONS TO ALL ENDPOINTS !!!
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         return [
             key.copy(
                 update={
@@ -304,42 +305,7 @@ curl -s http://localhost:8001/services | jq
 
 ### GitHub Actions with Pongo
 
-```yaml
-name: Tests
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Install Pongo
-        run: |
-          git clone https://github.com/Kong/kong-pongo.git
-          mkdir -p ~/.local/bin
-          ln -s $(realpath kong-pongo/pongo.sh) ~/.local/bin/pongo
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-
-      - name: Run tests
-        run: KONG_VERSION=3.0.x pongo run -- --verbose
-```
-
-### Local CI Script
-
-```bash
-#!/bin/bash
-set -e
-
-# Run unit tests
-luajit spec/unit/simple-backend-jwt-test.lua
-
-# Run integration tests with Pongo (if available)
-if command -v pongo &> /dev/null; then
-    KONG_VERSION=3.0.x pongo run -- --verbose
-fi
-```
+Unit and pongo integration tests are run as part of the `.github/workflows/test.yml` Github action.
 
 ---
 
@@ -348,13 +314,14 @@ fi
 ### Common Issues
 
 1. **"pongo: command not found"**
+   Make sure pongo repository is checked out and exported to path (see installation instructions above)
    ```bash
    export PATH="$PATH:~/.local/bin"
    ```
 
 2. **"Docker not running"**
    ```bash
-   # Start Docker Desktop or
+   # Start Docker Desktop/Orbstack or
    sudo systemctl start docker
    ```
 
@@ -374,8 +341,11 @@ pongo tail
 # Get a shell in the Kong container
 pongo shell
 
-# Run specific test with verbose output
-pongo run ./spec/integration/02-plugin-integration_spec.lua -- -v -o gtest
+# Run specific test with verbose output in gtest format
+pongo run -- -v -o gtest ./spec/integration/01-plugin-integration_spec.lua 
+
+# Only run tests tagged with postgres
+pongo run -- --tags=postgres
 ```
 
 ---
