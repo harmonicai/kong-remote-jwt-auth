@@ -103,6 +103,9 @@ end
 -- @param config Plugin configuration
 function _M.set_cerberus_jwt_header(config)
     if not config.jwt_service_url then
+        -- Clients should not be setting the Cerberus header - set it to nil
+        kong.service.request.set_header(HARMONIC_CERBERUS_JWT, nil)
+        kong.log.debug("Setting Cerberus JWT header to nil - jwt_service_url not configured")
         return
     end
 
