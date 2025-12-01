@@ -5,7 +5,7 @@
 
 echo "Setting up kong-remote-jwt-auth plugin test environment..."
 
-# Ensure the shared dict is configured (usually done via kong.conf)
-# The plugin requires a shared dict named 'remote_jwt_auth'
+# Ensure the 'remote_jwt_auth' shared dict is configured for caching
+export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 
 echo "Plugin test environment ready."

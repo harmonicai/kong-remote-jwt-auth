@@ -184,12 +184,7 @@ Expected output:
 
 Pongo shell provides a full Kong environment for manual testing (e.g. with sample requests). There are three setup scripts available.
 
-**Important:** The plugin requires a shared dictionary to be configured. You must set this environment variable **before** starting Kong:
-
-```bash
-export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
-kms
-```
+**Note:** The plugin requires a shared dictionary named `remote_jwt_auth`. This is automatically configured via `.pongo/pongo-setup.sh`, so you can simply run `kms` to start Kong.
 
 ### Option 1: Basic Testing (No Backend)
 
@@ -197,7 +192,6 @@ For testing JWT validation without a backend JWT service:
 
 ```bash
 KONG_VERSION=3.0.x pongo shell
-export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 kms
 bash /kong-plugin/spec/setup-manual-test.sh
 
@@ -211,7 +205,6 @@ For testing the full flow with a mock JWT backend that returns a static JWT:
 
 ```bash
 KONG_VERSION=3.0.x pongo shell
-export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
 kms
 bash /kong-plugin/spec/setup-mock-test.sh
 
@@ -243,8 +236,7 @@ GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f do
 # 2. Start pongo shell (NOTE: You should specify the kong version you are trying to test against)
 KONG_VERSION=3.0.x pongo shell
 
-# 3. Start Kong with the shared dict configured (inside the shell)
-export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
+# 3. Start Kong (inside the shell)
 kms
 
 # 4. Setup Kong to route to your local Docker midtier/graphql
@@ -253,7 +245,7 @@ bash /kong-plugin/spec/setup-local-backend.sh
 # Or specify custom ports if your services use different ports:
 # bash /kong-plugin/spec/setup-local-backend.sh --midtier-port 8080 --graphql-port 4000
 
-# 5. Test requests (Authorization header requires valid Firebase JWT)
+# 5. Test requests (Authorization header requires valid Firebase JWT - for DEV, can fetch from Chrome network inspector in staging)
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'apikey: localkey'
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'
 curl -i -X POST 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>' -H 'Content-Type: application/json' -d '{"query": "{ __typename }"}'
