@@ -70,7 +70,8 @@ local function fetch_jwt_from_backend(config, consumer_id)
             end
         end
         -- Truncate response body for logging
-        local body_preview = res.body and (res.body:len() > 200 and (res.body:sub(1, 200) .. "...") or res.body) or "nil"
+        local body_preview = res.body and (res.body:len() > 200 and (res.body:sub(1, 200) .. "...") or res.body)
+            or "nil"
         kong.log.debug("  Body: ", body_preview)
     end
 
