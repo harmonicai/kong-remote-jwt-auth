@@ -83,16 +83,10 @@ local function fetch_jwt_from_backend(config, consumer_id)
     local max_retries = config.jwt_service_retries or 3
     local base_delay_ms = config.jwt_service_retry_base_delay or 100
 
-    local res, err = request_with_retry(
-        httpc,
-        config.jwt_service_url,
-        {
-            method = "GET",
-            headers = original_headers,
-        },
-        max_retries,
-        base_delay_ms
-    )
+    local res, err = request_with_retry(httpc, config.jwt_service_url, {
+        method = "GET",
+        headers = original_headers,
+    }, max_retries, base_delay_ms)
 
     -- Log the response details
     if res == nil then
