@@ -35,16 +35,18 @@ local function fetch_jwt_from_backend(config, consumer_id)
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
 
-    -- Log the request details
-    kong.log.notice("Making request to JWT backend service:")
-    kong.log.notice("  URL: ", config.jwt_service_url)
-    kong.log.notice("  Method: GET")
-    kong.log.notice("  Headers:")
-    for name, value in pairs(original_headers) do
-        -- Truncate long header values for readability
-        local display_value = type(value) == "string" and value:len() > 100 and (value:sub(1, 100) .. "...")
-            or tostring(value)
-        kong.log.notice("    ", name, ": ", display_value)
+    -- Log the request details at debug level
+    if kong.log.is_debug_enabled() then
+        kong.log.debug("Making request to JWT backend service:")
+        kong.log.debug("  URL: ", config.jwt_service_url)
+        kong.log.debug("  Method: GET")
+        kong.log.debug("  Headers:")
+        for name, value in pairs(original_headers) do
+            -- Truncate long header values for readability
+            local display_value = type(value) == "string" and value:len() > 100 and (value:sub(1, 100) .. "...")
+                or tostring(value)
+            kong.log.debug("    ", name, ": ", display_value)
+        end
     end
 
     local res, err = httpc:request_uri(config.jwt_service_url, {
@@ -58,18 +60,19 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, err
     end
 
-    kong.log.notice("Backend JWT service response:")
-    kong.log.notice("  Status: ", res.status)
-    kong.log.notice("  Headers:")
-    if res.headers then
-        for name, value in pairs(res.headers) do
-            kong.log.notice("    ", name, ": ", tostring(value))
+    if kong.log.is_debug_enabled() then
+        kong.log.debug("Backend JWT service response:")
+        kong.log.debug("  Status: ", res.status)
+        kong.log.debug("  Headers:")
+        if res.headers then
+            for name, value in pairs(res.headers) do
+                kong.log.debug("    ", name, ": ", tostring(value))
+            end
         end
+        -- Truncate response body for logging
+        local body_preview = res.body and (res.body:len() > 200 and (res.body:sub(1, 200) .. "...") or res.body) or "nil"
+        kong.log.debug("  Body: ", body_preview)
     end
-
-    -- Truncate response body for logging
-    local body_preview = res.body and (res.body:len() > 200 and (res.body:sub(1, 200) .. "...") or res.body) or "nil"
-    kong.log.notice("  Body: ", body_preview)
 
     if res.status ~= 200 then
         kong.log.err("Backend JWT service returned non-200 status: ", res.status)
@@ -111,7 +114,7 @@ function _M.set_cerberus_jwt_header(config)
 
     if backend_jwt then
         kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
-        kong.log.notice("Set ", HARMONIC_CERBERUS_JWT, " header with JWT: ", backend_jwt:sub(1, 50), "...")
+        kong.log.debug("Set ", HARMONIC_CERBERUS_JWT, " header with JWT: ", backend_jwt:sub(1, 50), "...")
     elseif err then
         kong.log.warn("Failed to fetch backend JWT (request will continue): ", err)
     end
