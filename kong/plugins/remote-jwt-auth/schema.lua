@@ -79,6 +79,18 @@ return {
                             default = 5000,
                         },
                     },
+                    {
+                        jwt_service_retries = {
+                            type = "number",
+                            default = 3,
+                        },
+                    },
+                    {
+                        jwt_service_retry_base_delay = {
+                            type = "number",
+                            default = 100, -- milliseconds
+                        },
+                    },
                 },
             },
         },

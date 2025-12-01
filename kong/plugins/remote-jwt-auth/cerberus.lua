@@ -7,6 +7,37 @@ local _M = {}
 
 local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
 
+-- Retry HTTP request with exponential backoff and jitter
+-- Only retries on connection errors and 5xx responses
+local function request_with_retry(httpc, url, opts, max_retries, base_delay_ms)
+    local res, err
+
+    for attempt = 1, max_retries do
+        res, err = httpc:request_uri(url, opts)
+
+        if res then
+            -- Success - return if not a server error
+            if res.status < 500 then
+                return res, nil
+            end
+            -- 5xx response - treat as retryable error
+            err = "server error: " .. res.status
+        end
+
+        -- Don't sleep after the last attempt
+        if attempt < max_retries then
+            -- Exponential backoff with jitter: random delay in [0, 2^(attempt-1) * base_delay)
+            local max_delay = math.pow(2, attempt - 1) * base_delay_ms
+            local delay_ms = math.random(0, max_delay)
+            local delay_s = delay_ms / 1000
+            ngx.sleep(delay_s)
+            kong.log.debug("JWT service retry attempt ", attempt, "/", max_retries, " after ", delay_ms, "ms: ", err)
+        end
+    end
+
+    return res, err
+end
+
 local function generate_cache_key(config, key)
     local digest = sha512:new()
     assert(digest:update(config.cache_namespace))
@@ -49,14 +80,23 @@ local function fetch_jwt_from_backend(config, consumer_id)
         end
     end
 
-    local res, err = httpc:request_uri(config.jwt_service_url, {
-        method = "GET",
-        headers = original_headers,
-    })
+    local max_retries = config.jwt_service_retries or 3
+    local base_delay_ms = config.jwt_service_retry_base_delay or 100
+
+    local res, err = request_with_retry(
+        httpc,
+        config.jwt_service_url,
+        {
+            method = "GET",
+            headers = original_headers,
+        },
+        max_retries,
+        base_delay_ms
+    )
 
     -- Log the response details
     if res == nil then
-        kong.log.err("Request for backend JWT failed: ", err)
+        kong.log.err("Request for backend JWT failed after ", max_retries, " attempts: ", err)
         return nil, err
     end
 
