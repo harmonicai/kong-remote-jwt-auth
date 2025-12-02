@@ -1,8 +1,120 @@
 -- JWT Token Validation Tests
 -- Tests actual JWT signing and validation with generated keys
 -- Run with: pongo run spec/unit/jwt-validation-test.lua
+--
+-- This test imports the REAL firebase.lua module and mocks only the external
+-- dependencies (HTTP client, cache, Kong globals) to test actual validation logic.
 
 local cjson = require("cjson")
+
+-- ============================================================================
+-- Mock Infrastructure (must be set up BEFORE requiring firebase.lua)
+-- ============================================================================
+
+-- Mock HTTP responses for certificate fetching
+local mock_http_responses = {}
+
+local function set_mock_certificate_response(url, certificates)
+    -- certificates is a table of { kid = pem_cert_string, ... }
+    mock_http_responses[url] = {
+        status = 200,
+        headers = {
+            ["Cache-Control"] = "max-age=3600",
+        },
+        body = cjson.encode(certificates),
+    }
+end
+
+-- Mock HTTP client (resty.http)
+package.loaded["resty.http"] = {
+    new = function()
+        return {
+            set_timeout = function(self, timeout) end,
+            request_uri = function(self, url, options)
+                local response = mock_http_responses[url]
+                if response then
+                    return response, nil
+                end
+                return nil, "No mock response for URL: " .. url
+            end,
+        }
+    end,
+}
+
+-- Mock cache
+local mock_cache = { data = {} }
+
+mock_cache.get = function(self, key)
+    return self.data[key], nil
+end
+
+mock_cache.store = function(self, key, value, expires_at)
+    self.data[key] = value
+    return true, nil
+end
+
+mock_cache.clear = function(self)
+    self.data = {}
+end
+
+package.loaded["kong.plugins.remote-jwt-auth.cache"] = mock_cache
+
+-- Mock Kong globals
+local kong_log_messages = {}
+local mock_request_headers = {}
+local mock_query_args = {}
+local set_headers = {}
+
+-- Helper function to concatenate args with tostring
+local function concat_args(...)
+    local args = { ... }
+    local result = {}
+    for i, v in ipairs(args) do
+        result[i] = tostring(v)
+    end
+    return table.concat(result, "")
+end
+
+_G.kong = {
+    log = setmetatable({
+        err = function(...)
+            table.insert(kong_log_messages, "ERR: " .. concat_args(...))
+        end,
+        warn = function(...)
+            table.insert(kong_log_messages, "WARN: " .. concat_args(...))
+        end,
+        notice = function(...) end,
+        debug = function(...) end,
+    }, {
+        __call = function(self, ...)
+            table.insert(kong_log_messages, "LOG: " .. concat_args(...))
+        end,
+    }),
+    request = {
+        get_header = function(name)
+            return mock_request_headers[string.lower(name)]
+        end,
+        get_headers = function()
+            return mock_request_headers
+        end,
+        get_query = function()
+            return mock_query_args
+        end,
+    },
+    service = {
+        request = {
+            set_header = function(name, value)
+                set_headers[name] = value
+            end,
+        },
+    },
+}
+
+-- ============================================================================
+-- Now require the REAL firebase module (after mocks are set up)
+-- ============================================================================
+
+local firebase = require("kong.plugins.remote-jwt-auth.firebase")
 
 -- ============================================================================
 -- RSA Key and Certificate Generation Utilities
@@ -63,11 +175,6 @@ local function base64url_encode(input)
     return encoded
 end
 
-local function base64url_decode(input)
-    local b64 = require("ngx.base64")
-    return b64.decode_base64url(input)
-end
-
 local function create_jwt_header(kid, alg)
     alg = alg or "RS256"
     return cjson.encode({
@@ -122,272 +229,6 @@ local function create_signed_jwt(private_key, kid, claims, alg)
 end
 
 -- ============================================================================
--- Mock Infrastructure
--- ============================================================================
-
-local mock_certificates = {} -- kid -> PEM certificate string
-local mock_cache = { data = {} }
-
-mock_cache.get = function(self, key)
-    return self.data[key], nil
-end
-
-mock_cache.store = function(self, key, value, expires_at)
-    self.data[key] = value
-    return true, nil
-end
-
-mock_cache.clear = function(self)
-    self.data = {}
-end
-
--- Mock HTTP responses for certificate fetching
-local mock_http_responses = {}
-
-local function set_mock_certificate_response(url, certificates)
-    -- certificates is a table of { kid = pem_cert_string, ... }
-    mock_http_responses[url] = {
-        status = 200,
-        headers = {
-            ["Cache-Control"] = "max-age=3600",
-        },
-        body = cjson.encode(certificates),
-    }
-end
-
-local mock_http = {
-    new = function()
-        return {
-            set_timeout = function(self, timeout) end,
-            request_uri = function(self, url, options)
-                local response = mock_http_responses[url]
-                if response then
-                    return response, nil
-                end
-                return nil, "No mock response for URL: " .. url
-            end,
-        }
-    end,
-}
-
--- Mock Kong globals
-local kong_log_messages = {}
-local mock_request_headers = {}
-local mock_query_args = {}
-local set_headers = {}
-
--- Helper function to concatenate args with tostring
-local function concat_args(...)
-    local args = { ... }
-    local result = {}
-    for i, v in ipairs(args) do
-        result[i] = tostring(v)
-    end
-    return table.concat(result, "")
-end
-
-local mock_kong = {
-    log = setmetatable({
-        err = function(...)
-            table.insert(kong_log_messages, "ERR: " .. concat_args(...))
-        end,
-        warn = function(...)
-            table.insert(kong_log_messages, "WARN: " .. concat_args(...))
-        end,
-        notice = function(...) end,
-        debug = function(...) end,
-    }, {
-        __call = function(self, ...)
-            table.insert(kong_log_messages, "LOG: " .. concat_args(...))
-        end,
-    }),
-    request = {
-        get_header = function(name)
-            return mock_request_headers[string.lower(name)]
-        end,
-        get_headers = function()
-            return mock_request_headers
-        end,
-        get_query = function()
-            return mock_query_args
-        end,
-    },
-    service = {
-        request = {
-            set_header = function(name, value)
-                set_headers[name] = value
-            end,
-        },
-    },
-}
-
--- Set up global mocks
-_G.kong = mock_kong
-
--- ============================================================================
--- Firebase JWT Validation Logic (mirrors firebase.lua)
--- ============================================================================
-
-local sha512 = require("resty.sha512")
-local to_hex = require("resty.string").to_hex
-local ssl = require("ngx.ssl")
-local x509_lib = require("resty.openssl.x509")
-
-local function generate_cache_key(config, key)
-    local digest = sha512:new()
-    assert(digest:update(config.cache_namespace))
-    assert(digest:update(key))
-    return "remote-jwt-auth:" .. to_hex(digest:final())
-end
-
-local function fetch_signing_certificates(config, url)
-    local httpc = mock_http.new()
-    if httpc == nil then
-        kong.log.err("Failed to start a http request")
-        return nil, "HTTP client error"
-    end
-    httpc:set_timeout(config.timeout)
-    local start_of_request = os.time()
-    local res, err = httpc:request_uri(url, {})
-    if res == nil then
-        kong.log.err("Request for certificate failed: ", err)
-        return nil, err
-    end
-
-    local cache_control_header = res.headers["Cache-Control"]
-    if cache_control_header == nil then
-        kong.log.err("Could not find cache control header")
-        return nil, "Could not find cache control header"
-    end
-    local _, _, max_age_string = string.find(cache_control_header, "max%-age=(%d+)")
-    if max_age_string == nil then
-        kong.log.err("Could not find max-age string in cache control")
-        return nil, "Could not find max-age string in cache control"
-    end
-    local max_age = tonumber(max_age_string)
-    local expires_at = start_of_request + max_age
-
-    local response_body = cjson.decode(res.body)
-
-    local valid_certs = {}
-    for kid, cert in pairs(response_body) do
-        local parsed_cert_chain, err = ssl.parse_pem_cert(cert)
-        if parsed_cert_chain == nil then
-            kong.log.err("Failed to parse cert ", err)
-            return nil, err
-        end
-        valid_certs[kid] = cert
-        local success, err = mock_cache:store(generate_cache_key(config, kid), cert, expires_at)
-        if not success then
-            kong.log.err("Failed writing to the cache: ", err)
-            return nil, err
-        end
-    end
-    return valid_certs
-end
-
-local function get_signing_certificates(config, target_kid)
-    local jwt_cache_key = generate_cache_key(config, target_kid)
-    local cached_cert, err = mock_cache:get(jwt_cache_key)
-    if err then
-        kong.log.err("Failed to get cached cert ", err)
-        return nil, err
-    end
-    if cached_cert then
-        local parsed_cert_chain, err = ssl.parse_pem_cert(cached_cert)
-        if parsed_cert_chain == nil then
-            kong.log.err("Failed to parse cert ", err)
-            return nil, err
-        end
-        return cached_cert
-    end
-
-    -- call fetch signing certificates
-    for _, url in ipairs(config.signing_urls) do
-        local valid_certs, err = fetch_signing_certificates(config, url)
-        if err then
-            kong.log.err("Error fetching certs from ", url, ": ", err)
-        else
-            local parsed_cert = valid_certs[target_kid]
-            if parsed_cert then
-                return parsed_cert
-            end
-        end
-    end
-
-    kong.log.err("No certs matching kid ", target_kid, " found in the signing_urls.")
-    return nil, "No matching kid found."
-end
-
-local function list_contains(haystack, needle)
-    for _, hay in ipairs(haystack) do
-        if hay == needle then
-            return true
-        end
-    end
-    return false
-end
-
--- Validate JWT - mirrors firebase.validate_jwt
-local function validate_jwt(config, jwt_token)
-    if not jwt_token then
-        return false, { status = 401, message = "Unauthorized" }
-    end
-
-    local jwt_decoder = require("kong.plugins.jwt.jwt_parser")
-    local jwt, err = jwt_decoder:new(jwt_token)
-    if err then
-        kong.log("Not a valid JWT: ", err)
-        return false, { status = 401, message = "Bad token" }
-    end
-
-    local kid = jwt.header.kid
-    if not kid then
-        return false, { status = 401, message = "Unauthorized" }
-    end
-
-    local signing_cert, err = get_signing_certificates(config, kid)
-    if not signing_cert then
-        kong.log.err("Failed to get signing certificate.")
-        return false, { status = 401, message = "Unauthorized" }
-    end
-
-    local parsed_signing_cert, err = x509_lib.new(signing_cert)
-    if not parsed_signing_cert then
-        kong.log.err("Failed to parse signing cert.")
-        return false, { status = 401, message = "Unauthorized" }
-    end
-
-    if not jwt:verify_signature(parsed_signing_cert:get_pubkey():tostring()) then
-        kong.log.err("Invalid signature.")
-        return false, { status = 401, message = "Invalid signature" }
-    end
-
-    for _, claim_to_verify in ipairs(config.claims_to_verify) do
-        local claim_in_jwt = jwt.claims[claim_to_verify.name]
-        if not claim_in_jwt then
-            kong.log("JWT lacks a ", claim_to_verify.name, " name.")
-            return false, { status = 401, message = "Unauthorized" }
-        end
-
-        if not list_contains(claim_to_verify.allowed_values, claim_in_jwt) then
-            kong.log("Disallowed value for claim ", claim_to_verify.name, ": ", claim_in_jwt)
-            return false, { status = 401, message = "Unauthorized" }
-        end
-    end
-
-    -- Set user info headers from JWT claims
-    if jwt.claims.sub then
-        kong.service.request.set_header("X-Token-User-Id", jwt.claims.sub)
-    end
-    if jwt.claims.email then
-        kong.service.request.set_header("X-Token-User-Email", jwt.claims.email)
-    end
-
-    return true, jwt_token
-end
-
--- ============================================================================
 -- Test Framework
 -- ============================================================================
 
@@ -430,18 +271,6 @@ local function assert_not_nil(value, message)
     end
 end
 
-local function assert_contains(haystack, needle, message)
-    if type(haystack) == "string" and string.find(haystack, needle, 1, true) then
-        tests_passed = tests_passed + 1
-        return true
-    end
-    print("   FAIL: " .. (message or "string does not contain expected value"))
-    print("   Looking for: " .. tostring(needle))
-    print("   In: " .. tostring(haystack))
-    tests_failed = tests_failed + 1
-    return false
-end
-
 local function reset_test_state()
     kong_log_messages = {}
     mock_request_headers = {}
@@ -463,6 +292,11 @@ local function run_test(name, test_function)
         print("   PASS")
     end
     print("")
+end
+
+-- Helper to set up mock request with JWT in Authorization header
+local function set_mock_request_jwt(jwt_token)
+    mock_request_headers["authorization"] = "Bearer " .. jwt_token
 end
 
 -- ============================================================================
@@ -489,7 +323,7 @@ local wrong_kid = "wrong-key-id-002"
 local wrong_certificate = generate_self_signed_certificate(wrong_private_key, wrong_kid)
 local wrong_cert_pem = wrong_certificate:to_PEM()
 
--- Helper function to shallow copy and merge tables (replaces vim.tbl_extend)
+-- Helper function to shallow copy and merge tables
 local function tbl_extend(...)
     local result = {}
     for _, t in ipairs({ ... }) do
@@ -529,8 +363,9 @@ run_test("validates correctly signed JWT token", function()
         iss = "https://test.example.com",
         aud = "test-audience",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_true(ok, "Should validate correctly signed JWT")
     assert_equals(jwt, result, "Should return the JWT token")
 end)
@@ -546,8 +381,9 @@ run_test("rejects JWT signed with wrong key", function()
     local jwt = create_signed_jwt(wrong_private_key, test_kid, {
         sub = "user-123",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT signed with wrong key")
     assert_equals(401, result.status, "Should return 401 status")
     assert_equals("Invalid signature", result.message, "Should return Invalid signature message")
@@ -562,8 +398,9 @@ run_test("rejects JWT with unknown kid", function()
     local jwt = create_signed_jwt(test_private_key, "unknown-kid", {
         sub = "user-123",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT with unknown kid")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -579,8 +416,9 @@ run_test("rejects JWT with missing kid header", function()
     local payload = base64url_encode(cjson.encode({ sub = "user-123", exp = os.time() + 3600 }))
     local signature = sign_jwt_rs256(test_private_key, header, payload)
     local jwt = header .. "." .. payload .. "." .. signature
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT without kid header")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -612,8 +450,9 @@ run_test("rejects tampered JWT payload", function()
     }))
 
     local tampered_jwt = parts[1] .. "." .. tampered_payload .. "." .. parts[3]
+    set_mock_request_jwt(tampered_jwt)
 
-    local ok, result = validate_jwt(config, tampered_jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject tampered JWT")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -639,8 +478,9 @@ run_test("validates JWT with required claim present and allowed", function()
         sub = "user-123",
         aud = "test-audience",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_true(ok, "Should validate JWT with correct claim value")
 end)
 
@@ -658,8 +498,9 @@ run_test("rejects JWT with disallowed claim value", function()
         sub = "user-123",
         aud = "wrong-audience",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT with disallowed claim value")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -678,8 +519,9 @@ run_test("rejects JWT missing required claim", function()
         sub = "user-123",
         -- aud claim missing
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT missing required claim")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -700,8 +542,9 @@ run_test("validates JWT with multiple claim requirements", function()
         aud = "test-audience",
         iss = "https://auth.example.com",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_true(ok, "Should validate JWT with all required claims")
 end)
 
@@ -721,8 +564,9 @@ run_test("rejects JWT when one of multiple claims is invalid", function()
         aud = "test-audience", -- Valid
         iss = "https://wrong-issuer.com", -- Invalid
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, result = validate_jwt(config, jwt)
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject JWT with any invalid claim")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -743,8 +587,9 @@ run_test("sets X-Token-User-Id header from sub claim", function()
     local jwt = create_signed_jwt(test_private_key, test_kid, {
         sub = "user-456",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, _ = validate_jwt(config, jwt)
+    local ok, _ = firebase.validate_jwt(config)
     assert_true(ok, "Should validate JWT")
     assert_equals("user-456", set_headers["X-Token-User-Id"], "Should set X-Token-User-Id header")
 end)
@@ -759,8 +604,9 @@ run_test("sets X-Token-User-Email header from email claim", function()
         sub = "user-789",
         email = "user@example.com",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, _ = validate_jwt(config, jwt)
+    local ok, _ = firebase.validate_jwt(config)
     assert_true(ok, "Should validate JWT")
     assert_equals("user@example.com", set_headers["X-Token-User-Email"], "Should set X-Token-User-Email header")
 end)
@@ -774,8 +620,9 @@ run_test("does not set email header when email claim is missing", function()
     local jwt = create_signed_jwt(test_private_key, test_kid, {
         sub = "user-no-email",
     })
+    set_mock_request_jwt(jwt)
 
-    local ok, _ = validate_jwt(config, jwt)
+    local ok, _ = firebase.validate_jwt(config)
     assert_true(ok, "Should validate JWT")
     assert_nil(set_headers["X-Token-User-Email"], "Should not set X-Token-User-Email when email missing")
 end)
@@ -787,37 +634,39 @@ end)
 print("Malformed Token Tests")
 print("---------------------")
 
-run_test("rejects nil token", function()
+run_test("rejects when no token provided", function()
     local config = tbl_extend(base_config)
-    local ok, result = validate_jwt(config, nil)
-    assert_false(ok, "Should reject nil token")
-    assert_equals(401, result.status, "Should return 401 status")
-end)
+    -- Don't set any Authorization header
+    mock_request_headers = {}
 
-run_test("rejects empty string token", function()
-    local config = tbl_extend(base_config)
-    local ok, result = validate_jwt(config, "")
-    assert_false(ok, "Should reject empty token")
+    local ok, result = firebase.validate_jwt(config)
+    assert_false(ok, "Should reject when no token")
     assert_equals(401, result.status, "Should return 401 status")
 end)
 
 run_test("rejects completely invalid token format", function()
     local config = tbl_extend(base_config)
-    local ok, result = validate_jwt(config, "not-a-jwt")
+    set_mock_request_jwt("not-a-jwt")
+
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject invalid token format")
     assert_equals(401, result.status, "Should return 401 status")
 end)
 
 run_test("rejects token with only two parts", function()
     local config = tbl_extend(base_config)
-    local ok, result = validate_jwt(config, "header.payload")
+    set_mock_request_jwt("header.payload")
+
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject token with only two parts")
     assert_equals(401, result.status, "Should return 401 status")
 end)
 
 run_test("rejects token with invalid base64 encoding", function()
     local config = tbl_extend(base_config)
-    local ok, result = validate_jwt(config, "!!!invalid!!!.!!!base64!!!.!!!encoding!!!")
+    set_mock_request_jwt("!!!invalid!!!.!!!base64!!!.!!!encoding!!!")
+
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should reject token with invalid base64")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -837,7 +686,8 @@ run_test("caches certificates after first fetch", function()
 
     -- First validation - should fetch cert
     local jwt1 = create_signed_jwt(test_private_key, test_kid, { sub = "user-1" })
-    local ok1, _ = validate_jwt(config, jwt1)
+    set_mock_request_jwt(jwt1)
+    local ok1, _ = firebase.validate_jwt(config)
     assert_true(ok1, "First validation should succeed")
 
     -- Clear the mock response to prove cache is being used
@@ -845,7 +695,8 @@ run_test("caches certificates after first fetch", function()
 
     -- Second validation - should use cached cert
     local jwt2 = create_signed_jwt(test_private_key, test_kid, { sub = "user-2" })
-    local ok2, _ = validate_jwt(config, jwt2)
+    set_mock_request_jwt(jwt2)
+    local ok2, _ = firebase.validate_jwt(config)
     assert_true(ok2, "Second validation should succeed using cached cert")
 end)
 
@@ -854,7 +705,9 @@ run_test("handles certificate fetch failure gracefully", function()
     -- Don't set any mock response - simulates network failure
 
     local jwt = create_signed_jwt(test_private_key, test_kid, { sub = "user-123" })
-    local ok, result = validate_jwt(config, jwt)
+    set_mock_request_jwt(jwt)
+
+    local ok, result = firebase.validate_jwt(config)
     assert_false(ok, "Should fail when certificate cannot be fetched")
     assert_equals(401, result.status, "Should return 401 status")
 end)
@@ -873,7 +726,9 @@ run_test("supports multiple signing URLs with fallback", function()
     })
 
     local jwt = create_signed_jwt(test_private_key, test_kid, { sub = "user-123" })
-    local ok, _ = validate_jwt(config, jwt)
+    set_mock_request_jwt(jwt)
+
+    local ok, _ = firebase.validate_jwt(config)
     assert_true(ok, "Should find certificate from secondary URL")
 end)
 
@@ -888,13 +743,81 @@ run_test("handles multiple key IDs from same endpoint", function()
 
     -- Validate token signed with first key
     local jwt1 = create_signed_jwt(test_private_key, test_kid, { sub = "user-1" })
-    local ok1, _ = validate_jwt(config, jwt1)
+    set_mock_request_jwt(jwt1)
+    local ok1, _ = firebase.validate_jwt(config)
     assert_true(ok1, "Should validate token with first key")
+
+    -- Clear cache to force re-fetch for second key
+    mock_cache:clear()
 
     -- Validate token signed with second key
     local jwt2 = create_signed_jwt(wrong_private_key, wrong_kid, { sub = "user-2" })
-    local ok2, _ = validate_jwt(config, jwt2)
+    set_mock_request_jwt(jwt2)
+    local ok2, _ = firebase.validate_jwt(config)
     assert_true(ok2, "Should validate token with second key")
+end)
+
+-- ============================================================================
+-- JWT Extraction Tests
+-- ============================================================================
+
+print("JWT Extraction Tests")
+print("--------------------")
+
+run_test("extracts JWT from Authorization header with Bearer prefix", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, { sub = "user-auth" })
+    mock_request_headers["authorization"] = "Bearer " .. jwt
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should extract JWT from Authorization header")
+end)
+
+run_test("extracts JWT from Proxy-Authorization header", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, { sub = "user-proxy" })
+    mock_request_headers["proxy-authorization"] = "Bearer " .. jwt
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should extract JWT from Proxy-Authorization header")
+end)
+
+run_test("extracts JWT from query parameter", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, { sub = "user-query" })
+    mock_query_args["jwt"] = jwt
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should extract JWT from query parameter")
+end)
+
+run_test("prefers Authorization header over Proxy-Authorization", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt_auth = create_signed_jwt(test_private_key, test_kid, { sub = "user-auth-header" })
+    local jwt_proxy = create_signed_jwt(test_private_key, test_kid, { sub = "user-proxy-header" })
+
+    mock_request_headers["authorization"] = "Bearer " .. jwt_auth
+    mock_request_headers["proxy-authorization"] = "Bearer " .. jwt_proxy
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should validate successfully")
+    assert_equals("user-auth-header", set_headers["X-Token-User-Id"], "Should use Authorization header JWT")
 end)
 
 -- ============================================================================
