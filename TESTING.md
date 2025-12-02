@@ -6,8 +6,9 @@ This document describes how to test the Kong Remote JWT Auth Plugin.
 
 ```
 spec/
-├── unit/                              # Unit tests (no Kong dependencies)
-│   └── simple-backend-jwt-test.lua    # Standalone tests (runs with luajit only)
+├── unit/                              # Unit tests
+│   ├── simple-backend-jwt-test.lua    # Cerberus JWT fetching tests (runs with luajit)
+│   └── jwt-validation-test.lua        # JWT signature/claims validation tests (requires pongo/resty)
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 01-plugin-integration_spec.lua # Full plugin integration tests
 │   └── 02-schema_spec.lua             # Schema validation tests
@@ -100,7 +101,7 @@ These disable unnecessary services to speed up test startup.
 
 ## Quick Local Tests (No Docker Required)
 
-### Standalone Unit Tests
+### Standalone Unit Tests (Cerberus JWT Fetching)
 
 Requires LuaJIT:
 
@@ -136,6 +137,38 @@ Expected output:
 🎉 All tests passed!
 ```
 
+### JWT Token Validation Tests (Requires Pongo)
+
+These tests generate real RSA keys, create X.509 certificates, and sign JWT tokens to test the actual cryptographic validation:
+
+```bash
+pongo run spec/unit/jwt-validation-test.lua
+```
+
+Expected output:
+```
+JWT Token Validation Tests
+==========================
+
+Generating test RSA key pair and certificate...
+  Key and certificate generated successfully
+
+Signature Validation Tests
+--------------------------
+  validates correctly signed JWT token
+   PASS
+  rejects JWT signed with wrong key
+   PASS
+...
+Test Results
+============
+Passed: 42
+Failed: 0
+Total:  42
+
+All tests passed!
+```
+
 ---
 
 ## Test Scenarios Covered
@@ -153,6 +186,40 @@ Expected output:
 - ✅ Handles empty response body
 - ✅ Uses per-user cache keys
 - ✅ Uses default timeout when not specified
+
+### Unit Tests - JWT Token Validation (with real cryptography)
+
+**Signature Validation:**
+- ✅ Validates correctly signed JWT token
+- ✅ Rejects JWT signed with wrong key
+- ✅ Rejects JWT with unknown kid
+- ✅ Rejects JWT with missing kid header
+- ✅ Rejects tampered JWT payload
+
+**Claims Verification:**
+- ✅ Validates JWT with required claim present and allowed
+- ✅ Rejects JWT with disallowed claim value
+- ✅ Rejects JWT missing required claim
+- ✅ Validates JWT with multiple claim requirements
+- ✅ Rejects JWT when one of multiple claims is invalid
+
+**User Header Extraction:**
+- ✅ Sets X-Token-User-Id header from sub claim
+- ✅ Sets X-Token-User-Email header from email claim
+- ✅ Does not set email header when email claim is missing
+
+**Malformed Token Handling:**
+- ✅ Rejects nil token
+- ✅ Rejects empty string token
+- ✅ Rejects completely invalid token format
+- ✅ Rejects token with only two parts
+- ✅ Rejects token with invalid base64 encoding
+
+**Certificate Fetching:**
+- ✅ Caches certificates after first fetch
+- ✅ Handles certificate fetch failure gracefully
+- ✅ Supports multiple signing URLs with fallback
+- ✅ Handles multiple key IDs from same endpoint
 
 ### Integration Tests
 
