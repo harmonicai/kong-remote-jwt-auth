@@ -7,8 +7,9 @@ This document describes how to test the Kong Remote JWT Auth Plugin.
 ```
 spec/
 ├── unit/                              # Unit tests
-│   ├── simple-backend-jwt-test.lua    # Cerberus JWT fetching tests (runs with luajit)
-│   └── jwt-validation-test.lua        # JWT signature/claims validation tests (requires pongo/resty)
+│   ├── simple-backend-jwt-test.lua    # Cerberus JWT fetching tests (runs with luajit, duplicated logic)
+│   ├── cerberus-test.lua              # Cerberus JWT tests using real module (requires pongo)
+│   └── jwt-validation-test.lua        # JWT signature/claims validation tests (requires pongo)
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 01-plugin-integration_spec.lua # Full plugin integration tests
 │   └── 02-schema_spec.lua             # Schema validation tests
@@ -162,9 +163,38 @@ Signature Validation Tests
 ...
 Test Results
 ============
-Passed: 42
+Passed: 45
 Failed: 0
-Total:  42
+Total:  45
+
+All tests passed!
+```
+
+### Cerberus JWT Tests (Requires Pongo)
+
+These tests import the real `cerberus.lua` module and test JWT fetching, caching, and retry logic:
+
+```bash
+pongo run spec/unit/cerberus-test.lua
+```
+
+Expected output:
+```
+Cerberus JWT Fetching Tests
+===========================
+
+Basic Functionality Tests
+-------------------------
+  clears cerberus header when jwt_service_url is not configured
+   PASS
+  skips anonymous users
+   PASS
+...
+Test Results
+============
+Passed: 39
+Failed: 0
+Total:  39
 
 All tests passed!
 ```
@@ -173,19 +203,37 @@ All tests passed!
 
 ## Test Scenarios Covered
 
-### Unit Tests - Cerberus JWT Fetching
+### Unit Tests - Cerberus JWT Fetching (using real module)
 
-- ✅ Returns nil when `jwt_service_url` not configured
+**Basic Functionality:**
+- ✅ Clears cerberus header when `jwt_service_url` not configured
 - ✅ Skips anonymous users
 - ✅ Skips when no consumer is present
-- ✅ Returns cached JWT when available
-- ✅ Fetches JWT from backend service successfully
-- ✅ Passes original headers to backend
-- ✅ Handles HTTP connection failures
-- ✅ Handles non-200 HTTP status codes
-- ✅ Handles empty response body
-- ✅ Uses per-user cache keys
+- ✅ Fetches JWT from backend and sets header
+- ✅ Passes original request headers to backend
+- ✅ Uses configured timeout
 - ✅ Uses default timeout when not specified
+
+**Caching:**
+- ✅ Caches JWT after successful fetch
+- ✅ Uses per-user cache keys
+
+**Error Handling:**
+- ✅ Handles HTTP connection failure gracefully
+- ✅ Handles non-200 HTTP status
+- ✅ Handles 500 error with retry
+- ✅ Handles empty response body
+- ✅ Handles nil response body
+
+**Retry Logic:**
+- ✅ Retries on connection failure then succeeds
+- ✅ Does not retry on 4xx errors
+- ✅ Uses configured retry count
+- ✅ Uses default retry count when not specified
+
+**Request Configuration:**
+- ✅ Uses GET method for backend request
+- ✅ Uses configured jwt_service_url
 
 ### Unit Tests - JWT Token Validation (with real cryptography)
 
