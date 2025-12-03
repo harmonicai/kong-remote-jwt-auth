@@ -175,6 +175,17 @@ function _M.validate_jwt(config)
         return false, { status = 401, message = "Invalid signature" }
     end
 
+    -- Validate token expiry
+    local now = os.time()
+    if jwt.claims.exp and jwt.claims.exp < now then
+        kong.log("JWT has expired")
+        return false, { status = 401, message = "Token expired" }
+    end
+    if jwt.claims.nbf and jwt.claims.nbf > now then
+        kong.log("JWT not yet valid (nbf)")
+        return false, { status = 401, message = "Token not yet valid" }
+    end
+
     for _, claim_to_verify in ipairs(config.claims_to_verify) do
         local claim_in_jwt = jwt.claims[claim_to_verify.name]
         if not claim_in_jwt then

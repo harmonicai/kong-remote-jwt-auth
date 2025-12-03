@@ -627,6 +627,117 @@ run_test("does not set email header when email claim is missing", function()
     assert_nil(set_headers["X-Token-User-Email"], "Should not set X-Token-User-Email when email missing")
 end)
 
+run_test("clears spoofed user headers on validation failure", function()
+    local config = tbl_extend(base_config)
+    -- Pre-set spoofed headers (simulating malicious client)
+    set_headers["X-Token-User-Id"] = "spoofed-admin"
+    set_headers["X-Token-User-Email"] = "admin@evil.com"
+
+    -- Don't set any mock cert response - validation will fail
+    set_mock_request_jwt("invalid-token")
+
+    local ok, result = firebase.validate_jwt(config)
+    assert_false(ok, "Should reject invalid token")
+    assert_nil(set_headers["X-Token-User-Id"], "Should clear spoofed user ID")
+    assert_nil(set_headers["X-Token-User-Email"], "Should clear spoofed email")
+end)
+
+-- ============================================================================
+-- Token Expiry Tests
+-- ============================================================================
+
+print("Token Expiry Tests")
+print("------------------")
+
+run_test("rejects expired JWT token", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, {
+        sub = "user-123",
+        exp = os.time() - 3600, -- Expired 1 hour ago
+    })
+    set_mock_request_jwt(jwt)
+
+    local ok, result = firebase.validate_jwt(config)
+    assert_false(ok, "Should reject expired JWT")
+    assert_equals(401, result.status, "Should return 401 status")
+    assert_equals("Token expired", result.message, "Should return Token expired message")
+end)
+
+run_test("accepts JWT that has not yet expired", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, {
+        sub = "user-123",
+        exp = os.time() + 3600, -- Expires in 1 hour
+    })
+    set_mock_request_jwt(jwt)
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should accept non-expired JWT")
+end)
+
+run_test("rejects JWT with nbf in the future", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, {
+        sub = "user-123",
+        nbf = os.time() + 3600, -- Not valid until 1 hour from now
+    })
+    set_mock_request_jwt(jwt)
+
+    local ok, result = firebase.validate_jwt(config)
+    assert_false(ok, "Should reject JWT with future nbf")
+    assert_equals(401, result.status, "Should return 401 status")
+    assert_equals("Token not yet valid", result.message, "Should return Token not yet valid message")
+end)
+
+run_test("accepts JWT with nbf in the past", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    local jwt = create_signed_jwt(test_private_key, test_kid, {
+        sub = "user-123",
+        nbf = os.time() - 3600, -- Valid since 1 hour ago
+    })
+    set_mock_request_jwt(jwt)
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should accept JWT with past nbf")
+end)
+
+run_test("accepts JWT without exp claim", function()
+    local config = tbl_extend(base_config)
+    set_mock_certificate_response("https://test.example.com/certs", {
+        [test_kid] = test_cert_pem,
+    })
+
+    -- Create JWT without exp claim by overriding defaults
+    local header = base64url_encode(cjson.encode({ alg = "RS256", typ = "JWT", kid = test_kid }))
+    local payload = base64url_encode(cjson.encode({
+        sub = "user-123",
+        iat = os.time(),
+        -- No exp claim
+    }))
+    local signature = sign_jwt_rs256(test_private_key, header, payload)
+    local jwt = header .. "." .. payload .. "." .. signature
+    set_mock_request_jwt(jwt)
+
+    local ok, _ = firebase.validate_jwt(config)
+    assert_true(ok, "Should accept JWT without exp claim")
+end)
+
 -- ============================================================================
 -- Malformed Token Tests
 -- ============================================================================
