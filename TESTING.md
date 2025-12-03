@@ -218,6 +218,14 @@ All tests passed!
 - ✅ Sets X-Token-User-Id header from sub claim
 - ✅ Sets X-Token-User-Email header from email claim
 - ✅ Does not set email header when email claim is missing
+- ✅ Clears spoofed user headers on validation failure
+
+**Token Expiry Validation:**
+- ✅ Rejects expired JWT token
+- ✅ Accepts JWT that has not yet expired
+- ✅ Rejects JWT with nbf in the future
+- ✅ Accepts JWT with nbf in the past
+- ✅ Accepts JWT without exp claim
 
 **Malformed Token Handling:**
 - ✅ Rejects nil token
