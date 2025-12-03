@@ -7,23 +7,8 @@ on:
     branches: [master, main]
 
 jobs:
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install LuaJIT
-        uses: leafo/gh-actions-lua@v12
-        with:
-          luaVersion: "luajit-2.1"
-
-      - name: Run unit tests
-        run: luajit spec/unit/simple-backend-jwt-test.lua
-
-  jwt-validation-tests:
-    name: JWT Validation Tests
+  firebase-jwt-validation-tests:
+    name: Firebase JWT Validation Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,8 +19,8 @@ jobs:
         with:
           kong_version: "3.0.x"
 
-      - name: Run JWT validation tests
-        run: pongo run -v -o gtest spec/unit/jwt-validation-test.lua
+      - name: Run Firebase JWT validation tests
+        run: pongo run -v -o gtest spec/unit/firebase-jwt-validation-test.lua
 
   cerberus-tests:
     name: Cerberus JWT Tests

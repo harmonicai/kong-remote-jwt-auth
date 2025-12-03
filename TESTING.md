@@ -6,10 +6,9 @@ This document describes how to test the Kong Remote JWT Auth Plugin.
 
 ```
 spec/
-├── unit/                              # Unit tests
-│   ├── simple-backend-jwt-test.lua    # Cerberus JWT fetching tests (runs with luajit, duplicated logic)
-│   ├── cerberus-test.lua              # Cerberus JWT tests using real module (requires pongo)
-│   └── jwt-validation-test.lua        # JWT signature/claims validation tests (requires pongo)
+├── unit/                              # Unit tests (requires Pongo)
+│   ├── cerberus-test.lua              # Cerberus JWT fetching/caching/retry tests
+│   └── firebase-jwt-validation-test.lua  # Firebase JWT signature/claims validation tests
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 01-plugin-integration_spec.lua # Full plugin integration tests
 │   └── 02-schema_spec.lua             # Schema validation tests
@@ -100,50 +99,14 @@ These disable unnecessary services to speed up test startup.
 
 ---
 
-## Quick Local Tests (No Docker Required)
+## Unit Tests (Requires Pongo)
 
-### Standalone Unit Tests (Cerberus JWT Fetching)
-
-Requires LuaJIT:
-
-```bash
-# macOS
-brew install luajit
-```
-
-Run the tests:
-
-```bash
-# Run standalone tests
-luajit spec/unit/simple-backend-jwt-test.lua
-```
-
-Expected output:
-```
-🚀 Running Cerberus JWT Fetching Tests
-======================================
-
-🧪 Returns nil when jwt_service_url is not configured
-✅ PASS: Returns nil when jwt_service_url is not configured
-
-🧪 Skips anonymous users
-✅ PASS: Skips anonymous users
-...
-📊 Test Results
-===============
-✅ Passed: 25
-❌ Failed: 0
-📈 Total:  25
-
-🎉 All tests passed!
-```
-
-### JWT Token Validation Tests (Requires Pongo)
+### Firebase JWT Validation Tests
 
 These tests generate real RSA keys, create X.509 certificates, and sign JWT tokens to test the actual cryptographic validation:
 
 ```bash
-pongo run spec/unit/jwt-validation-test.lua
+pongo run spec/unit/firebase-jwt-validation-test.lua
 ```
 
 Expected output:
@@ -203,7 +166,7 @@ All tests passed!
 
 ## Test Scenarios Covered
 
-### Unit Tests - Cerberus JWT Fetching (using real module)
+### Unit Tests - Cerberus JWT Fetching
 
 **Basic Functionality:**
 - ✅ Clears cerberus header when `jwt_service_url` not configured
@@ -235,7 +198,7 @@ All tests passed!
 - ✅ Uses GET method for backend request
 - ✅ Uses configured jwt_service_url
 
-### Unit Tests - JWT Token Validation (with real cryptography)
+### Unit Tests - JWT Token Validation
 
 **Signature Validation:**
 - ✅ Validates correctly signed JWT token
