@@ -1,5 +1,5 @@
 local http = require("resty.http")
-local sha512 = require("resty.sha512")
+local sha256 = require("resty.sha256")
 local to_hex = require("resty.string").to_hex
 local cache = require("kong.plugins.remote-jwt-auth.cache")
 
@@ -39,7 +39,7 @@ local function request_with_retry(httpc, url, opts, max_retries, base_delay_ms)
 end
 
 local function generate_cache_key(config, key)
-    local digest = sha512:new()
+    local digest = sha256:new()
     assert(digest:update(config.cache_namespace))
     assert(digest:update(key))
     return "remote-jwt-auth:" .. to_hex(digest:final())
