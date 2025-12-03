@@ -106,6 +106,9 @@ _G.kong = {
             set_header = function(name, value)
                 set_headers[name] = value
             end,
+            clear_header = function(name)
+                set_headers[name] = nil
+            end,
         },
     },
 }

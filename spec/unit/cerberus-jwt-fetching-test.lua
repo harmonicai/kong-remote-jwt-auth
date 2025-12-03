@@ -127,6 +127,9 @@ _G.kong = {
             set_header = function(name, value)
                 set_headers[name] = value
             end,
+            clear_header = function(name)
+                set_headers[name] = nil
+            end,
         },
     },
 }
@@ -269,9 +272,12 @@ run_test("clears cerberus header when jwt_service_url is not configured", functi
     local config = { cache_namespace = "test" }
     mock_consumer = { username = "test-user" }
 
+    -- Pre-set a spoofed header value that should be cleared
+    set_headers["x-harmonic-cerberus-jwt"] = "spoofed-jwt-value"
+
     cerberus.set_cerberus_jwt_header(config)
 
-    -- Should set the header to nil to clear any client-set value
+    -- Should clear any client-set value
     assert_equals(nil, set_headers["x-harmonic-cerberus-jwt"], "Should clear cerberus header")
 end)
 
