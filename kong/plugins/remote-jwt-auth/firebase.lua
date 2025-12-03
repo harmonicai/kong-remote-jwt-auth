@@ -138,8 +138,8 @@ end
 -- Returns: (true, jwt_token) on success, (false, error_response) on failure
 function _M.validate_jwt(config)
     -- Clear user info headers to prevent spoofing - they will be set from valid JWT claims
-    kong.service.request.set_header(TOKEN_USER_ID, nil)
-    kong.service.request.set_header(TOKEN_USER_EMAIL, nil)
+    kong.service.request.clear_header(TOKEN_USER_ID)
+    kong.service.request.clear_header(TOKEN_USER_EMAIL)
 
     local jwt_token = _M.extract_jwt_from_request()
 
