@@ -137,6 +137,10 @@ end
 -- Validate Firebase JWT: verify signature and claims
 -- Returns: (true, jwt_token) on success, (false, error_response) on failure
 function _M.validate_jwt(config)
+    -- Clear user info headers to prevent spoofing - they will be set from valid JWT claims
+    kong.service.request.set_header(TOKEN_USER_ID, nil)
+    kong.service.request.set_header(TOKEN_USER_EMAIL, nil)
+
     local jwt_token = _M.extract_jwt_from_request()
 
     if not jwt_token then
