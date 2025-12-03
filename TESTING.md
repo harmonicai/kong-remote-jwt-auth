@@ -7,7 +7,7 @@ This document describes how to test the Kong Remote JWT Auth Plugin.
 ```
 spec/
 ├── unit/                              # Unit tests (requires Pongo)
-│   ├── cerberus-test.lua              # Cerberus JWT fetching/caching/retry tests
+│   ├── cerberus-jwt-fetching-test.lua    # Cerberus JWT fetching/caching/retry tests
 │   └── firebase-jwt-validation-test.lua  # Firebase JWT signature/claims validation tests
 ├── integration/                       # Integration tests (requires Kong/Pongo)
 │   ├── 01-plugin-integration_spec.lua # Full plugin integration tests
@@ -133,12 +133,12 @@ Total:  45
 All tests passed!
 ```
 
-### Cerberus JWT Tests (Requires Pongo)
+### Cerberus JWT Fetching Tests
 
 These tests import the real `cerberus.lua` module and test JWT fetching, caching, and retry logic:
 
 ```bash
-pongo run spec/unit/cerberus-test.lua
+pongo run spec/unit/cerberus-jwt-fetching-test.lua
 ```
 
 Expected output:

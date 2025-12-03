@@ -22,8 +22,8 @@ jobs:
       - name: Run Firebase JWT validation tests
         run: pongo run -v -o gtest spec/unit/firebase-jwt-validation-test.lua
 
-  cerberus-tests:
-    name: Cerberus JWT Tests
+  cerberus-jwt-fetching-tests:
+    name: Cerberus JWT Fetching Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,8 +34,8 @@ jobs:
         with:
           kong_version: "3.0.x"
 
-      - name: Run Cerberus JWT tests
-        run: pongo run -v -o gtest spec/unit/cerberus-test.lua
+      - name: Run Cerberus JWT fetching tests
+        run: pongo run -v -o gtest spec/unit/cerberus-jwt-fetching-test.lua
 
   integration-tests:
     name: Integration Tests (Kong ${{ matrix.kong_version }})
