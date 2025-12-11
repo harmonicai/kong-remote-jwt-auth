@@ -151,6 +151,7 @@ function _M.set_cerberus_jwt_header(config)
     local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username)
 
     if backend_jwt then
+        -- TODO: Clear Authorization/apikey headers after updating downstreams to only read Cerberus JWT
         kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
         kong.log.debug("Set ", HARMONIC_CERBERUS_JWT, " header with JWT: ", backend_jwt:sub(1, 50), "...")
     elseif err then
