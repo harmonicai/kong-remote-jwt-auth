@@ -114,7 +114,11 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, "Backend service error: " .. res.status
     end
 
-    local response_jwt = res.body
+    -- Response is a JSON string (quoted), so strip quotes and whitespace
+    local response_jwt = res.body and res.body:gsub('^%s*"?(.-)%s*"?%s*$', '%1') or nil
+
+    -- Debug logging for JWT response
+    kong.log.debug("Parsed backend JWT: ", response_jwt)
 
     if not response_jwt or response_jwt == "" then
         kong.log.err("Backend JWT service response missing JWT token")
