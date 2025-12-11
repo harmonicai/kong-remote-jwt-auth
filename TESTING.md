@@ -331,7 +331,7 @@ bash /kong-plugin/spec/setup-local-backend.sh
 # Or specify custom ports if your services use different ports:
 # bash /kong-plugin/spec/setup-local-backend.sh --midtier-port 8080 --graphql-port 4000
 
-# 5. Test requests (Authorization header requires valid Firebase JWT - for DEV, can fetch from Chrome network inspector in staging)
+# 5. Test requests in pongo shell (Authorization header requires valid Firebase JWT - for DEV, can fetch from Chrome network inspector in staging)
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'apikey: localkey'
 curl -i 'http://localhost:8000/companies?ids=1354167&extended=true' -H 'Authorization: Bearer <firebase-jwt>'
 curl -i -X POST 'http://localhost:8000/graphql' -H 'Authorization: Bearer <firebase-jwt>' -H 'Content-Type: application/json' -d '{"query": "{ __typename }"}'
