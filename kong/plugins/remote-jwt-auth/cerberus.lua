@@ -115,7 +115,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
     end
 
     -- Response is a JSON string (quoted), so strip quotes and whitespace
-    local response_jwt = res.body and res.body:gsub('^%s*"?(.-)%s*"?%s*$', '%1') or nil
+    local response_jwt = res.body and res.body:gsub('^%s*"?(.-)%s*"?%s*$', "%1") or nil
 
     -- Debug logging for JWT response
     kong.log.debug("Parsed backend JWT: ", response_jwt)
