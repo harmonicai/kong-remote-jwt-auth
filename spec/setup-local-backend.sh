@@ -31,8 +31,11 @@ fi
 
 # Check if midtier is reachable
 echo "Checking connectivity to midtier (host.docker.internal:9000)..."
-MIDTIER_RESPONSE=$(curl -s --connect-timeout 2 http://host.docker.internal:9000/internals/health 2>&1)
-MIDTIER_EXIT=$?
+if MIDTIER_RESPONSE=$(curl -s --connect-timeout 2 http://host.docker.internal:9000/internals/health 2>&1); then
+  MIDTIER_EXIT=0
+else
+  MIDTIER_EXIT=1
+fi
 if [ $MIDTIER_EXIT -ne 0 ]; then
   echo "Warning: Cannot connect to midtier (host.docker.internal:9000)"
   echo "Make sure your backend services are running, e.g.:"
@@ -49,10 +52,13 @@ else
 fi
 
 echo "Checking connectivity to graphql (host.docker.internal:4000)..."
-GRAPHQL_RESPONSE=$(curl -s --connect-timeout 2 -X POST http://host.docker.internal:4000 \
+if GRAPHQL_RESPONSE=$(curl -s --connect-timeout 2 -X POST http://host.docker.internal:4000 \
   -H "Content-Type: application/json" \
-  -d '{"query": "{ __typename }"}' 2>&1)
-GRAPHQL_EXIT=$?
+  -d '{"query": "{ __typename }"}' 2>&1); then
+  GRAPHQL_EXIT=0
+else
+  GRAPHQL_EXIT=1
+fi
 if [ $GRAPHQL_EXIT -ne 0 ]; then
   echo "Warning: Cannot connect to graphql (host.docker.internal:4000)"
   echo "Make sure your backend services are running, e.g.:"
