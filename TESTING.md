@@ -366,6 +366,7 @@ Notes:
 ```bash
 # View Kong logs
 tail -f /kong-plugin/servroot/logs/error.log
+tail -50 /kong-plugin/servroot/logs/error.log
 
 # Check plugin config
 curl -s http://localhost:8001/plugins | jq
