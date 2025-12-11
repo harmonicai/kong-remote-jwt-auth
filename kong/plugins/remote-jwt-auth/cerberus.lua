@@ -125,7 +125,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, "Missing JWT token in response"
     end
 
-    local ttl = 300 -- Default TTL since response is just the token string
+    local ttl = 240 -- Cache TTL of 4 minutes (Cerberus JWT is valid for 5 minutes)
     local expires_at = start_of_request + ttl
 
     local success, err = cache:store(cache_key, response_jwt, expires_at)
@@ -155,7 +155,7 @@ function _M.set_cerberus_jwt_header(config)
     local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username)
 
     if backend_jwt then
-        -- TODO: Clear Authorization/apikey headers after updating downstreams to only read Cerberus JWT
+        -- TODO: Clear Authorization header after updating downstreams to only read Cerberus JWT
         kong.service.request.set_header(HARMONIC_CERBERUS_JWT, backend_jwt)
         kong.log.debug("Set ", HARMONIC_CERBERUS_JWT, " header with JWT: ", backend_jwt:sub(1, 50), "...")
     elseif err then
