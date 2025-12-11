@@ -97,6 +97,9 @@ local function concat_args(...)
 end
 
 _G.kong = {
+    configuration = {
+        log_level = debug_enabled and "debug" or "info",
+    },
     log = {
         err = function(...)
             table.insert(kong_log_messages, "ERR: " .. concat_args(...))
@@ -107,9 +110,6 @@ _G.kong = {
         notice = function(...) end,
         debug = function(...)
             table.insert(kong_log_messages, "DEBUG: " .. concat_args(...))
-        end,
-        is_debug_enabled = function()
-            return debug_enabled
         end,
     },
     request = {

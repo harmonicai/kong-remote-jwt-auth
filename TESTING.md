@@ -61,8 +61,8 @@ pongo run -- -v -o gtest ./spec/integration/01-plugin-integration_spec.lua
 # Only run tests tagged with postgres
 pongo run -- --tags=postgres
 
-# Run against a specific Kong version
-KONG_VERSION=3.0.x pongo run
+# Run against a specific Kong version with debug logging
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo run
 
 # Run against multiple Kong versions
 KONG_VERSION=3.0.x pongo run && KONG_VERSION=3.9.x pongo run
@@ -320,7 +320,7 @@ cd ~/workspace/backend
 GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f docker-compose.debug.yml --env-file settings/docker/dev.env up
 
 # 2. Start pongo shell (NOTE: You should specify the kong version you are trying to test against)
-KONG_VERSION=3.0.x pongo shell
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
 
 # 3. Start Kong (inside the shell)
 kms

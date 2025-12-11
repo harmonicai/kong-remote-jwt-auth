@@ -67,7 +67,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
     local original_headers = kong.request.get_headers()
 
     -- Log the request details at debug level
-    if kong.log.is_debug_enabled() then
+    if kong.configuration.log_level == "debug" then
         kong.log.debug("Making request to JWT backend service:")
         kong.log.debug("  URL: ", config.jwt_service_url)
         kong.log.debug("  Method: GET")
@@ -94,7 +94,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
         return nil, err
     end
 
-    if kong.log.is_debug_enabled() then
+    if kong.configuration.log_level == "debug" then
         kong.log.debug("Backend JWT service response:")
         kong.log.debug("  Status: ", res.status)
         kong.log.debug("  Headers:")
