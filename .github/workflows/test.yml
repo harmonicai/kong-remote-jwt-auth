@@ -1,0 +1,57 @@
+name: Kong Remote JWT Auth Plugin Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  KONG_VERSION: "3.0.x"
+
+jobs:
+  firebase-jwt-validation-tests:
+    name: Firebase JWT Validation Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pongo
+        uses: Kong/kong-pongo-action@v1
+        with:
+          kong_version: ${{ env.KONG_VERSION }}
+
+      - name: Run Firebase JWT validation tests
+        run: pongo run -v -o gtest spec/unit/firebase-jwt-validation-test.lua
+
+  cerberus-jwt-fetching-tests:
+    name: Cerberus JWT Fetching Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pongo
+        uses: Kong/kong-pongo-action@v1
+        with:
+          kong_version: ${{ env.KONG_VERSION }}
+
+      - name: Run Cerberus JWT fetching tests
+        run: pongo run -v -o gtest spec/unit/cerberus-jwt-fetching-test.lua
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pongo
+        uses: Kong/kong-pongo-action@v1
+        with:
+          kong_version: ${{ env.KONG_VERSION }}
+
+      - name: Run integration tests
+        # Runs all *_spec.lua files in spec/ directory (includes schema tests)
+        run: pongo run -v -o gtest

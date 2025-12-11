@@ -29,5 +29,7 @@ build = {
         ["kong.plugins." .. plugin_name .. ".handler"] = "kong/plugins/" .. plugin_name .. "/handler.lua",
         ["kong.plugins." .. plugin_name .. ".schema"] = "kong/plugins/" .. plugin_name .. "/schema.lua",
         ["kong.plugins." .. plugin_name .. ".cache"] = "kong/plugins/" .. plugin_name .. "/cache.lua",
+        ["kong.plugins." .. plugin_name .. ".firebase"] = "kong/plugins/" .. plugin_name .. "/firebase.lua",
+        ["kong.plugins." .. plugin_name .. ".cerberus"] = "kong/plugins/" .. plugin_name .. "/cerberus.lua",
     },
 }
