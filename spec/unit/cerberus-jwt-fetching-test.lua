@@ -377,7 +377,11 @@ run_test("adds JWT from query param to Authorization header when no auth header 
 
     assert_equals(1, #http_requests, "Should make HTTP request")
     local request = http_requests[1]
-    assert_equals("Bearer query-param-jwt-token", request.options.headers["Authorization"], "Should add JWT from query param as Bearer token")
+    assert_equals(
+        "Bearer query-param-jwt-token",
+        request.options.headers["Authorization"],
+        "Should add JWT from query param as Bearer token"
+    )
 end)
 
 run_test("does not override existing Authorization header with query param JWT", function()
@@ -399,7 +403,11 @@ run_test("does not override existing Authorization header with query param JWT",
 
     assert_equals(1, #http_requests, "Should make HTTP request")
     local request = http_requests[1]
-    assert_equals("Bearer existing-header-token", request.options.headers["Authorization"], "Should preserve existing Authorization header")
+    assert_equals(
+        "Bearer existing-header-token",
+        request.options.headers["Authorization"],
+        "Should preserve existing Authorization header"
+    )
 end)
 
 run_test("uses configured timeout", function()
