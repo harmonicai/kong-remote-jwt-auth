@@ -66,6 +66,12 @@ local function fetch_jwt_from_backend(config, consumer_id)
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
 
+    -- If JWT came from query params, add it to headers for the backend
+    local query_jwt = kong.request.get_query_arg("jwt")
+    if query_jwt and not original_headers["Authorization"] then
+        original_headers["Authorization"] = "Bearer " .. query_jwt
+    end
+
     -- Log the request details at debug level
     if kong.configuration.log_level == "debug" then
         kong.log.debug("Making request to JWT backend service:")

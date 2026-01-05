@@ -82,6 +82,7 @@ package.loaded["kong.plugins.remote-jwt-auth.cache"] = mock_cache
 -- Mock Kong globals
 local kong_log_messages = {}
 local mock_request_headers = {}
+local mock_query_args = {}
 local mock_consumer = nil
 local set_headers = {}
 local debug_enabled = false
@@ -115,6 +116,9 @@ _G.kong = {
     request = {
         get_headers = function()
             return mock_request_headers
+        end,
+        get_query_arg = function(name)
+            return mock_query_args[name]
         end,
     },
     client = {
@@ -205,6 +209,7 @@ end
 local function reset_test_state()
     kong_log_messages = {}
     mock_request_headers = {}
+    mock_query_args = {}
     mock_consumer = nil
     set_headers = {}
     mock_cache:clear()
@@ -351,6 +356,58 @@ run_test("passes original request headers to backend", function()
     assert_equals("Bearer firebase-token", request.options.headers["authorization"], "Should pass auth header")
     assert_equals("test-client", request.options.headers["user-agent"], "Should pass user-agent")
     assert_equals("custom-value", request.options.headers["x-custom-header"], "Should pass custom header")
+end)
+
+run_test("adds JWT from query param to Authorization header when no auth header present", function()
+    local config = tbl_extend(base_config)
+    mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["user-agent"] = "test-client",
+    }
+    mock_query_args = {
+        ["jwt"] = "query-param-jwt-token",
+    }
+
+    set_mock_http_response("http://backend:8080/auth/jwt", {
+        status = 200,
+        body = "jwt-token",
+    })
+
+    cerberus.set_cerberus_jwt_header(config)
+
+    assert_equals(1, #http_requests, "Should make HTTP request")
+    local request = http_requests[1]
+    assert_equals(
+        "Bearer query-param-jwt-token",
+        request.options.headers["Authorization"],
+        "Should add JWT from query param as Bearer token"
+    )
+end)
+
+run_test("does not override existing Authorization header with query param JWT", function()
+    local config = tbl_extend(base_config)
+    mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["Authorization"] = "Bearer existing-header-token",
+    }
+    mock_query_args = {
+        ["jwt"] = "query-param-jwt-token",
+    }
+
+    set_mock_http_response("http://backend:8080/auth/jwt", {
+        status = 200,
+        body = "jwt-token",
+    })
+
+    cerberus.set_cerberus_jwt_header(config)
+
+    assert_equals(1, #http_requests, "Should make HTTP request")
+    local request = http_requests[1]
+    assert_equals(
+        "Bearer existing-header-token",
+        request.options.headers["Authorization"],
+        "Should preserve existing Authorization header"
+    )
 end)
 
 run_test("uses configured timeout", function()
