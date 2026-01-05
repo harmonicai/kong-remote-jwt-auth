@@ -1,0 +1,194 @@
+name: Release Kong Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver format, e.g., 2.0.1)'
+        required: true
+        type: string
+
+env:
+  PLUGIN_NAME: remote-jwt-auth
+  GCR_REGISTRY: gcr.io/innate-empire-283902/github.com/harmonicai/backend/kong
+
+jobs:
+  validate-version:
+    name: Validate Version Input
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - name: Validate semver format
+        id: validate
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+
+          # Remove 'v' prefix if provided
+          VERSION="${VERSION#v}"
+
+          # Validate semver format (major.minor.patch)
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Version '$VERSION' is not valid semver format"
+            echo "Expected format: X.Y.Z (e.g., 2.0.1)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Validated version: $VERSION"
+
+  create-release-branch:
+    name: Create Release Branch
+    needs: validate-version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.validate-version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Check if branch already exists
+        run: |
+          BRANCH_NAME="v${{ env.VERSION }}"
+          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+            echo "Error: Branch '$BRANCH_NAME' already exists"
+            exit 1
+          fi
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create version branch
+        run: |
+          BRANCH_NAME="v${{ env.VERSION }}"
+          echo "Creating branch: $BRANCH_NAME"
+          git checkout -b "$BRANCH_NAME"
+
+      - name: Rename rockspec file
+        run: |
+          OLD_NAME="kong-plugin-remote-jwt-auth-dev-1.rockspec"
+          NEW_NAME="kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec"
+
+          if [ ! -f "$OLD_NAME" ]; then
+            echo "Error: Rockspec file '$OLD_NAME' not found"
+            exit 1
+          fi
+
+          mv "$OLD_NAME" "$NEW_NAME"
+          echo "Renamed: $OLD_NAME -> $NEW_NAME"
+
+      - name: Update rockspec package_version
+        run: |
+          ROCKSPEC_FILE="kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec"
+
+          # Update line 3: local package_version = "dev" -> local package_version = "{version}"
+          sed -i 's/^local package_version = "dev"/local package_version = "${{ env.VERSION }}"/' "$ROCKSPEC_FILE"
+
+          # Verify the change
+          echo "Updated rockspec content (first 10 lines):"
+          head -10 "$ROCKSPEC_FILE"
+
+      - name: Update handler.lua VERSION
+        run: |
+          HANDLER_FILE="kong/plugins/remote-jwt-auth/handler.lua"
+
+          # Update VERSION line
+          sed -i 's/VERSION = "[^"]*"/VERSION = "${{ env.VERSION }}"/' "$HANDLER_FILE"
+
+          # Verify the change
+          echo "Updated handler.lua VERSION line:"
+          grep "VERSION" "$HANDLER_FILE"
+
+      - name: Commit and push changes
+        run: |
+          BRANCH_NAME="v${{ env.VERSION }}"
+
+          git add -A
+          git commit -m "Release v${{ env.VERSION }}"
+          git push origin "$BRANCH_NAME"
+
+          echo "Successfully pushed branch: $BRANCH_NAME"
+
+  build-and-push-docker:
+    name: Build and Push Docker Images
+    needs: [validate-version, create-release-branch]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.validate-version.outputs.version }}
+    steps:
+      - name: Checkout backend repository
+        uses: actions/checkout@v4
+        with:
+          repository: harmonicai/backend
+          path: backend
+
+      - name: Update Dockerfile with new rockspec URL
+        run: |
+          DOCKERFILE="backend/services/kong/Dockerfile"
+
+          if [ ! -f "$DOCKERFILE" ]; then
+            echo "Error: Dockerfile not found at $DOCKERFILE"
+            exit 1
+          fi
+
+          # Create the new rockspec URL
+          NEW_ROCKSPEC_URL="https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v${{ env.VERSION }}/kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec"
+
+          # Update the luarocks install line for remote-jwt-auth
+          # Match the pattern and replace with new URL
+          sed -i -E 's|install https://raw\.githubusercontent\.com/harmonicai/kong-remote-jwt-auth/[^/]+/kong-plugin-remote-jwt-auth-[^[:space:]]+\.rockspec|install '"$NEW_ROCKSPEC_URL"'|' "$DOCKERFILE"
+
+          echo "Updated Dockerfile luarocks line:"
+          grep -A1 "remote-jwt-auth" "$DOCKERFILE" || grep "kong-plugin-remote-jwt-auth" "$DOCKERFILE"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker gcr.io --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image (dev)
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/services/kong/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.GCR_REGISTRY }}/dev:v${{ env.VERSION }}
+
+      - name: Build and push Docker image (prd)
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/services/kong/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.GCR_REGISTRY }}/prd:v${{ env.VERSION }}
+
+      - name: Output release summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** [v${{ env.VERSION }}](https://github.com/harmonicai/kong-remote-jwt-auth/tree/v${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Images:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.GCR_REGISTRY }}/dev:v${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.GCR_REGISTRY }}/prd:v${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rockspec URL:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v${{ env.VERSION }}/kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec\`" >> $GITHUB_STEP_SUMMARY
