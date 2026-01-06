@@ -8,10 +8,6 @@ on:
         required: true
         type: string
 
-env:
-  PLUGIN_NAME: remote-jwt-auth
-  GCR_REGISTRY: gcr.io/innate-empire-283902/github.com/harmonicai/backend/kong
-
 jobs:
   validate-version:
     name: Validate Version Input
@@ -113,71 +109,6 @@ jobs:
 
           echo "Successfully pushed branch: $BRANCH_NAME"
 
-  build-and-push-docker:
-    name: Build and Push Docker Images
-    needs: [validate-version, create-release-branch]
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.validate-version.outputs.version }}
-    steps:
-      - name: Checkout backend repository
-        uses: actions/checkout@v4
-        with:
-          repository: harmonicai/backend
-          path: backend
-
-      - name: Update Dockerfile with new rockspec URL
-        run: |
-          DOCKERFILE="backend/services/kong/Dockerfile"
-
-          if [ ! -f "$DOCKERFILE" ]; then
-            echo "Error: Dockerfile not found at $DOCKERFILE"
-            exit 1
-          fi
-
-          # Create the new rockspec URL
-          NEW_ROCKSPEC_URL="https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v${{ env.VERSION }}/kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec"
-
-          # Update the luarocks install line for remote-jwt-auth
-          # Match the pattern and replace with new URL
-          sed -i -E 's|install https://raw\.githubusercontent\.com/harmonicai/kong-remote-jwt-auth/[^/]+/kong-plugin-remote-jwt-auth-[^[:space:]]+\.rockspec|install '"$NEW_ROCKSPEC_URL"'|' "$DOCKERFILE"
-
-          echo "Updated Dockerfile luarocks line:"
-          grep -A1 "remote-jwt-auth" "$DOCKERFILE" || grep "kong-plugin-remote-jwt-auth" "$DOCKERFILE"
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for GCR
-        run: |
-          gcloud auth configure-docker gcr.io --quiet
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Docker image (dev)
-        uses: docker/build-push-action@v5
-        with:
-          context: backend
-          file: backend/services/kong/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.GCR_REGISTRY }}/dev:v${{ env.VERSION }}
-
-      - name: Build and push Docker image (prd)
-        uses: docker/build-push-action@v5
-        with:
-          context: backend
-          file: backend/services/kong/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.GCR_REGISTRY }}/prd:v${{ env.VERSION }}
-
       - name: Output release summary
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
@@ -185,10 +116,6 @@ jobs:
           echo "**Version:** v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** [v${{ env.VERSION }}](https://github.com/harmonicai/kong-remote-jwt-auth/tree/v${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Docker Images:**" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.GCR_REGISTRY }}/dev:v${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.GCR_REGISTRY }}/prd:v${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Rockspec URL:**" >> $GITHUB_STEP_SUMMARY
           echo "\`https://raw.githubusercontent.com/harmonicai/kong-remote-jwt-auth/v${{ env.VERSION }}/kong-plugin-remote-jwt-auth-${{ env.VERSION }}-1.rockspec\`" >> $GITHUB_STEP_SUMMARY
