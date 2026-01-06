@@ -3,7 +3,7 @@ local firebase = require("kong.plugins.remote-jwt-auth.firebase")
 local cerberus = require("kong.plugins.remote-jwt-auth.cerberus")
 
 local PubSubHandler = {
-    VERSION = "2.0.0",
+    VERSION = "2.0.1",
     PRIORITY = 1500,
 }
 
