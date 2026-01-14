@@ -6,8 +6,7 @@
 #   1. Start your local backend services (docker-compose up in backend repo)
 #   2. Start pongo shell:
 #      pongo shell
-#   3. Start Kong with the shared dict configured:
-#      export KONG_NGINX_HTTP_LUA_SHARED_DICT="remote_jwt_auth 1m"
+#   3. Start Kong:
 #      kms
 #   4. Run this script:
 #      bash /kong-plugin/spec/setup-local-backend.sh
@@ -21,9 +20,8 @@ echo "Setting up Kong for local backend testing..."
 # Check if Kong is running
 if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
   echo "Error: Kong is not running."
-  echo "Please start Kong first with the shared dict configured:"
+  echo "Please start Kong first:"
   echo ""
-  echo "  export KONG_NGINX_HTTP_LUA_SHARED_DICT=\"remote_jwt_auth 1m\""
   echo "  kms"
   echo ""
   exit 1
@@ -114,7 +112,7 @@ curl -s -X POST http://localhost:8001/services/midtier/routes \
   --data 'paths[]=/'
 echo
 
-# Enable remote-jwt-auth on midtier
+# Enable remote-jwt-auth on midtier with Firebase signing certificates
 echo "Enabling remote-jwt-auth plugin on midtier..."
 curl -s -X POST http://localhost:8001/services/midtier/plugins \
   -H "Content-Type: application/json" \
