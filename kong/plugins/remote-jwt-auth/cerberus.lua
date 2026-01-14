@@ -46,29 +46,24 @@ local function request_with_retry(httpc, url, opts, max_retries, base_delay_ms)
     return res, err
 end
 
-local function generate_cache_key(config, key)
-    local digest = sha256:new()
-    assert(digest:update(config.cache_namespace))
-    assert(digest:update(key))
-    return "remote-jwt-auth:" .. to_hex(digest:final())
-end
+-- local function generate_cache_key(config, key)
+--     local digest = sha256:new()
+--     assert(digest:update(config.cache_namespace))
+--     assert(digest:update(key))
+--     return "remote-jwt-auth:" .. to_hex(digest:final())
+-- end
 
 local function fetch_jwt_from_backend(config, consumer_id)
-    local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
-    kong.log.debug(
-        "Checking cache for backend JWT for consumer: ",
-        consumer_id,
-        ", Cache key: ",
-        cache_key,
-        ", Request ID: ",
-        get_request_id()
-    )
-    local cached_jwt, err = cache:get(cache_key)
-    if err then
-        kong.log.err("Failed to get cached backend JWT: ", err)
-    elseif cached_jwt then
-        return cached_jwt, nil
-    end
+    -- kong.log.debug("Fetching backend JWT from backend for consumer: ", consumer_id)
+    -- local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
+    -- kong.log.debug("Fetching backend JWT from cache: ", cache_key)
+    -- local cached_jwt, err = cache:get(cache_key)
+    -- if err then
+    --     kong.log.err("Failed to get cached backend JWT: ", err)
+    -- elseif cached_jwt then
+    --     kong.log.debug("Found cached backend JWT: ", cached_jwt)
+    --     return cached_jwt, nil
+    -- end
 
     local httpc, err = http.new()
     if httpc == nil then
@@ -184,6 +179,7 @@ function _M.set_cerberus_jwt_header(config)
         return
     end
 
+    -- consumer is the value of "authenticated_consumer" in the plugin config (e.g. console-firebase)
     local backend_jwt, err = fetch_jwt_from_backend(config, consumer.username)
 
     if backend_jwt then
