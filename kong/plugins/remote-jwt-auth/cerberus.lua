@@ -1,7 +1,4 @@
 local http = require("resty.http")
-local sha256 = require("resty.sha256")
-local to_hex = require("resty.string").to_hex
-local cache = require("kong.plugins.remote-jwt-auth.cache")
 
 local _M = {}
 
@@ -46,25 +43,7 @@ local function request_with_retry(httpc, url, opts, max_retries, base_delay_ms)
     return res, err
 end
 
--- local function generate_cache_key(config, key)
---     local digest = sha256:new()
---     assert(digest:update(config.cache_namespace))
---     assert(digest:update(key))
---     return "remote-jwt-auth:" .. to_hex(digest:final())
--- end
-
 local function fetch_jwt_from_backend(config, consumer_id)
-    -- kong.log.debug("Fetching backend JWT from backend for consumer: ", consumer_id)
-    -- local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
-    -- kong.log.debug("Fetching backend JWT from cache: ", cache_key)
-    -- local cached_jwt, err = cache:get(cache_key)
-    -- if err then
-    --     kong.log.err("Failed to get cached backend JWT: ", err)
-    -- elseif cached_jwt then
-    --     kong.log.debug("Found cached backend JWT: ", cached_jwt)
-    --     return cached_jwt, nil
-    -- end
-
     local httpc, err = http.new()
     if httpc == nil then
         kong.log.err("Failed to start HTTP request for backend JWT: ", err)
@@ -72,7 +51,6 @@ local function fetch_jwt_from_backend(config, consumer_id)
     end
 
     httpc:set_timeout(config.jwt_service_timeout or 5000)
-    local start_of_request = os.time()
 
     -- Get all original request headers to pass to backend service
     local original_headers = kong.request.get_headers()
@@ -140,24 +118,6 @@ local function fetch_jwt_from_backend(config, consumer_id)
     if not response_jwt or response_jwt == "" then
         kong.log.err("Backend JWT service response missing JWT token")
         return nil, "Missing JWT token in response"
-    end
-
-    local ttl = 240 -- Cache TTL of 4 minutes (Cerberus JWT is valid for 5 minutes)
-    local expires_at = start_of_request + ttl
-
-    kong.log.debug(
-        "Caching backend JWT for consumer: ",
-        consumer_id,
-        ", Cache key: ",
-        cache_key,
-        ", Expires at: ",
-        expires_at,
-        ", Request ID: ",
-        get_request_id()
-    )
-    local success, err = cache:store(cache_key, response_jwt, expires_at)
-    if not success then
-        kong.log.err("Failed to cache backend JWT: ", err)
     end
 
     return response_jwt, nil

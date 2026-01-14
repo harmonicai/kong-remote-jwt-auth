@@ -3,7 +3,7 @@
 -- Run with: pongo run spec/unit/cerberus-test.lua
 --
 -- This test imports the REAL cerberus.lua module and mocks only the external
--- dependencies (HTTP client, cache, Kong globals) to test actual fetching logic.
+-- dependencies (HTTP client, Kong globals) to test actual fetching logic.
 
 local cjson = require("cjson")
 
@@ -60,24 +60,6 @@ package.loaded["resty.http"] = {
         }
     end,
 }
-
--- Mock cache
-local mock_cache = { data = {} }
-
-mock_cache.get = function(self, key)
-    return self.data[key], nil
-end
-
-mock_cache.store = function(self, key, value, expires_at)
-    self.data[key] = value
-    return true, nil
-end
-
-mock_cache.clear = function(self)
-    self.data = {}
-end
-
-package.loaded["kong.plugins.remote-jwt-auth.cache"] = mock_cache
 
 -- Mock Kong globals
 local kong_log_messages = {}
@@ -212,7 +194,6 @@ local function reset_test_state()
     mock_query_args = {}
     mock_consumer = nil
     set_headers = {}
-    mock_cache:clear()
     mock_http_responses = {}
     http_requests = {}
     mock_http_should_fail = false
@@ -250,7 +231,6 @@ local base_config = {
     jwt_service_timeout = 5000,
     jwt_service_retries = 3,
     jwt_service_retry_base_delay = 100,
-    cache_namespace = "test-cerberus",
 }
 
 -- Helper function to shallow copy and merge tables
@@ -274,7 +254,7 @@ print("Basic Functionality Tests")
 print("-------------------------")
 
 run_test("clears cerberus header when jwt_service_url is not configured", function()
-    local config = { cache_namespace = "test" }
+    local config = {}
     mock_consumer = { username = "test-user" }
 
     -- Pre-set a spoofed header value that should be cleared
@@ -430,7 +410,6 @@ end)
 run_test("uses default timeout when not specified", function()
     local config = {
         jwt_service_url = "http://backend:8080/auth/jwt",
-        cache_namespace = "test",
         -- jwt_service_timeout not specified
     }
     mock_consumer = { username = "test-user" }
@@ -444,63 +423,6 @@ run_test("uses default timeout when not specified", function()
 
     assert_equals(1, #http_requests, "Should make HTTP request")
     assert_equals(5000, http_requests[1].timeout, "Should use default 5000ms timeout")
-end)
-
--- ============================================================================
--- Caching Tests
--- ============================================================================
-
-print("Caching Tests")
-print("-------------")
-
-run_test("caches JWT after successful fetch", function()
-    local config = tbl_extend(base_config)
-    mock_consumer = { username = "cache-test-user" }
-
-    set_mock_http_response("http://backend:8080/auth/jwt", {
-        status = 200,
-        body = "cached-jwt-token",
-    })
-
-    -- First call - should fetch
-    cerberus.set_cerberus_jwt_header(config)
-    assert_equals(1, #http_requests, "First call should make HTTP request")
-    assert_equals("cached-jwt-token", set_headers["x-harmonic-cerberus-jwt"], "Should set header")
-
-    -- Clear HTTP mock to prove cache is used
-    mock_http_responses = {}
-    set_headers = {}
-
-    -- Second call - should use cache
-    cerberus.set_cerberus_jwt_header(config)
-    assert_equals(1, #http_requests, "Second call should NOT make HTTP request (cached)")
-    assert_equals("cached-jwt-token", set_headers["x-harmonic-cerberus-jwt"], "Should set header from cache")
-end)
-
-run_test("uses per-user cache keys", function()
-    local config = tbl_extend(base_config)
-
-    -- First user
-    mock_consumer = { username = "user-alpha" }
-    set_mock_http_response("http://backend:8080/auth/jwt", {
-        status = 200,
-        body = "alpha-jwt-token",
-    })
-
-    cerberus.set_cerberus_jwt_header(config)
-    assert_equals("alpha-jwt-token", set_headers["x-harmonic-cerberus-jwt"], "Should set alpha's token")
-
-    -- Second user - should make new request, not use alpha's cached token
-    mock_consumer = { username = "user-beta" }
-    set_mock_http_response("http://backend:8080/auth/jwt", {
-        status = 200,
-        body = "beta-jwt-token",
-    })
-    set_headers = {}
-
-    cerberus.set_cerberus_jwt_header(config)
-    assert_equals(2, #http_requests, "Should make separate request for each user")
-    assert_equals("beta-jwt-token", set_headers["x-harmonic-cerberus-jwt"], "Should set beta's token")
 end)
 
 -- ============================================================================
@@ -672,7 +594,6 @@ end)
 run_test("uses default retry count when not specified", function()
     local config = {
         jwt_service_url = "http://backend:8080/auth/jwt",
-        cache_namespace = "test",
         -- jwt_service_retries not specified, defaults to 3
     }
     mock_consumer = { username = "test-user" }

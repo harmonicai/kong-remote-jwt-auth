@@ -75,7 +75,6 @@ curl -s -X POST http://localhost:8001/services/test-service/plugins \
         {"name": "iss", "allowed_values": ["https://securetoken.google.com/innate-empire-283902"]},
         {"name": "aud", "allowed_values": ["innate-empire-283902"]}
       ],
-      "cache_namespace": "mock-test",
       "jwt_service_url": "http://localhost:8000/mock-jwt",
       "jwt_service_timeout": 5000
     }

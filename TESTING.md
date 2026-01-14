@@ -135,7 +135,7 @@ All tests passed!
 
 ### Cerberus JWT Fetching Tests
 
-These tests import the real `cerberus.lua` module and test JWT fetching, caching, and retry logic:
+These tests import the real `cerberus.lua` module and test JWT fetching and retry logic:
 
 ```bash
 pongo run spec/unit/cerberus-jwt-fetching-test.lua
@@ -176,10 +176,6 @@ All tests passed!
 - ✅ Passes original request headers to backend
 - ✅ Uses configured timeout
 - ✅ Uses default timeout when not specified
-
-**Caching:**
-- ✅ Caches JWT after successful fetch
-- ✅ Uses per-user cache keys
 
 **Error Handling:**
 - ✅ Handles HTTP connection failure gracefully
