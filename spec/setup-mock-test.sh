@@ -26,7 +26,7 @@ if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
 fi
 
 # Create mock JWT backend service
-# This uses httpbin's /base64 endpoint to return a fake JWT string
+# This uses httpbin's /base64 endpoint to return a fake JWT string "JWT test response"
 echo "Creating mock JWT backend service..."
 curl -s -X POST http://localhost:8001/services \
   -H "Content-Type: application/json" \
