@@ -47,7 +47,10 @@ end
 
 local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
-    kong.log.debug("Checking cache for backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key)
+    -- These headers set by the firebase.lua logic
+    local user_id = kong.service.request.get_header("X-Token-User-Id")
+    local user_email = kong.service.request.get_header("X-Token-User-Email")
+    kong.log.debug("Checking cache for backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key, " User ID: ", user_id, " User Email: ", user_email)
     local cached_jwt, err = cache:get(cache_key)
     if err then
         kong.log.err("Failed to get cached backend JWT: ", err)
