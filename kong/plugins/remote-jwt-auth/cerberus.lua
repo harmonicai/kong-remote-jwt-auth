@@ -47,6 +47,7 @@ end
 
 local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
+    kong.log.debug("Checking cache for backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key)
     local cached_jwt, err = cache:get(cache_key)
     if err then
         kong.log.err("Failed to get cached backend JWT: ", err)
@@ -134,6 +135,7 @@ local function fetch_jwt_from_backend(config, consumer_id)
     local ttl = 240 -- Cache TTL of 4 minutes (Cerberus JWT is valid for 5 minutes)
     local expires_at = start_of_request + ttl
 
+    kong.log.debug("Caching backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key, " Expires at: ", expires_at)
     local success, err = cache:store(cache_key, response_jwt, expires_at)
     if not success then
         kong.log.err("Failed to cache backend JWT: ", err)
