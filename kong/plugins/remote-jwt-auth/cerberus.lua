@@ -50,7 +50,16 @@ local function fetch_jwt_from_backend(config, consumer_id)
     -- These headers set by the firebase.lua logic
     local user_id = kong.service.request.get_header("X-Token-User-Id")
     local user_email = kong.service.request.get_header("X-Token-User-Email")
-    kong.log.debug("Checking cache for backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key, " User ID: ", user_id, " User Email: ", user_email)
+    kong.log.debug(
+        "Checking cache for backend JWT for consumer: ",
+        consumer_id,
+        " Cache key: ",
+        cache_key,
+        " User ID: ",
+        user_id,
+        " User Email: ",
+        user_email
+    )
     local cached_jwt, err = cache:get(cache_key)
     if err then
         kong.log.err("Failed to get cached backend JWT: ", err)
@@ -138,7 +147,14 @@ local function fetch_jwt_from_backend(config, consumer_id)
     local ttl = 240 -- Cache TTL of 4 minutes (Cerberus JWT is valid for 5 minutes)
     local expires_at = start_of_request + ttl
 
-    kong.log.debug("Caching backend JWT for consumer: ", consumer_id, " Cache key: ", cache_key, " Expires at: ", expires_at)
+    kong.log.debug(
+        "Caching backend JWT for consumer: ",
+        consumer_id,
+        " Cache key: ",
+        cache_key,
+        " Expires at: ",
+        expires_at
+    )
     local success, err = cache:store(cache_key, response_jwt, expires_at)
     if not success then
         kong.log.err("Failed to cache backend JWT: ", err)
