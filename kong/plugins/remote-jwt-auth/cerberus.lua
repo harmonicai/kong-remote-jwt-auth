@@ -7,7 +7,9 @@ local _M = {}
 
 -- Safely get request_id (ngx.var not available in test context)
 local function get_request_id()
-    local ok, val = pcall(function() return ngx.var.request_id end)
+    local ok, val = pcall(function()
+        return ngx.var.request_id
+    end)
     return ok and val or "unknown"
 end
 
