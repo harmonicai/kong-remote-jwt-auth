@@ -5,6 +5,14 @@ local cache = require("kong.plugins.remote-jwt-auth.cache")
 
 local _M = {}
 
+-- Safely get request_id (ngx.var not available in test context)
+local function get_request_id()
+    local ok, val = pcall(function()
+        return ngx.var.request_id
+    end)
+    return ok and val or "unknown"
+end
+
 local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
 
 -- Retry HTTP request with exponential backoff and jitter
@@ -47,18 +55,13 @@ end
 
 local function fetch_jwt_from_backend(config, consumer_id)
     local cache_key = generate_cache_key(config, "backend-jwt:" .. consumer_id)
-    -- These headers set by the firebase.lua logic
-    local user_id = kong.service.request.get_header("X-Token-User-Id")
-    local user_email = kong.service.request.get_header("X-Token-User-Email")
     kong.log.debug(
         "Checking cache for backend JWT for consumer: ",
         consumer_id,
-        " Cache key: ",
+        ", Cache key: ",
         cache_key,
-        " User ID: ",
-        user_id,
-        " User Email: ",
-        user_email
+        ", Request ID: ",
+        get_request_id()
     )
     local cached_jwt, err = cache:get(cache_key)
     if err then
@@ -150,10 +153,12 @@ local function fetch_jwt_from_backend(config, consumer_id)
     kong.log.debug(
         "Caching backend JWT for consumer: ",
         consumer_id,
-        " Cache key: ",
+        ", Cache key: ",
         cache_key,
-        " Expires at: ",
-        expires_at
+        ", Expires at: ",
+        expires_at,
+        ", Request ID: ",
+        get_request_id()
     )
     local success, err = cache:store(cache_key, response_jwt, expires_at)
     if not success then
