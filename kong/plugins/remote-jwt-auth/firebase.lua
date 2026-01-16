@@ -9,6 +9,12 @@ local cache = require("kong.plugins.remote-jwt-auth.cache")
 
 local _M = {}
 
+-- Safely get request_id (ngx.var not available in test context)
+local function get_request_id()
+    local ok, val = pcall(function() return ngx.var.request_id end)
+    return ok and val or "unknown"
+end
+
 local AUTHORIZATION = "authorization"
 local PROXY_AUTHORIZATION = "proxy-authorization"
 local TOKEN_USER_ID = "X-Token-User-Id"
@@ -201,6 +207,14 @@ function _M.validate_jwt(config)
 
     -- Set user info headers from JWT claims
     local set_header = kong.service.request.set_header
+    kong.log.debug(
+        "Setting user info headers from JWT claims sub user_id: ",
+        jwt.claims.sub,
+        ", email: ",
+        jwt.claims.email,
+        ", Request ID: ",
+        get_request_id()
+    )
     if jwt.claims.sub then
         set_header(TOKEN_USER_ID, jwt.claims.sub)
     end
