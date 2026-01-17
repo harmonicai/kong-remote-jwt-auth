@@ -161,6 +161,67 @@ To release a new version of the plugin:
      tag: "v2.0.1"  # Update this to the new version, e.g., "v2.0.3"
    ```
 
+4. **Monitor the release** after merging PRs. Use the following resources to verify the deployment:
+
+   #### Dev Environment
+
+   - [GCP Artifact Registry (dev)](https://console.cloud.google.com/artifacts/docker/innate-empire-283902/us/gcr.io/github.com%2Fharmonicai%2Fbackend%2Fkong%2Fdev?project=innate-empire-283902)
+   - [k8s dev kong-kong deployment](https://console.cloud.google.com/kubernetes/deployment/us-central1/dev-cluster/kong/kong-kong/overview?project=innate-empire-283902)
+
+   ```sh
+   # Verify Flux reconciliation not failing
+   kubectl get kustomization -n flux
+   ```
+
+   #### Canary Environment
+
+   - [GCP Artifact Registry (prd)](https://console.cloud.google.com/artifacts/docker/innate-empire-283902/us/gcr.io/github.com%2Fharmonicai%2Fbackend%2Fkong%2Fprd?project=innate-empire-283902)
+   - [k8s canary kong-canary-kong deployment](https://console.cloud.google.com/kubernetes/deployment/us-central1/prd-cluster/kong-canary/kong-canary-kong/overview?project=innate-empire-283902)
+
+   ```sh
+   # Watch the GitRepository update
+   kubectl get gitrepository kong-canary -n kong-canary -w
+
+   # Watch the HelmChart build (name is based on name + namespace)
+   kubectl get helmchart kong-canary-kong-canary -n kong-canary -w
+
+   # Watch the HelmRelease deploy
+   kubectl get helmrelease kong-canary -n kong-canary -w
+
+   # Check pods rolling out
+   kubectl get pods -n kong-canary -w
+
+   # Check logs for errors
+   kubectl logs -n kong-canary -l app.kubernetes.io/instance=kong-canary -c proxy --tail=500 | grep -iE "error|warn|fail" | tail -30
+
+   # If "log_level: debug" is set on the k8s config, the plugin will output debug logs
+   kubectl logs -n kong-canary -l app.kubernetes.io/instance=kong-canary -c proxy -f | grep "remote-jwt-auth"
+   ```
+
+   #### Production Environment
+
+   - [k8s prd kong-kong deployment](https://console.cloud.google.com/kubernetes/deployment/us-central1/prd-cluster/kong/kong-kong/overview?inv=1&invt=AbieBQ&project=innate-empire-283902)
+
+   ```sh
+   # Watch the GitRepository update
+   kubectl get gitrepository kong -n kong -w
+
+   # Watch the HelmChart build
+   kubectl get helmchart kong-kong -n kong -w
+
+   # Watch the HelmRelease deploy
+   kubectl get helmrelease kong -n kong -w
+
+   # Check pods rolling out
+   kubectl get pods -n kong -w
+
+   # Check logs for errors
+   kubectl logs -n kong -l app.kubernetes.io/instance=kong -c proxy --tail=500 | grep -iE "error|warn|fail" | tail -30
+
+   # If "log_level: debug" is set on the k8s config, the plugin will output debug logs
+   kubectl logs -n kong -l app.kubernetes.io/instance=kong -c proxy -f | grep "remote-jwt-auth"
+   ```
+
 
 Q&A
 ---
