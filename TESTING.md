@@ -274,6 +274,7 @@ For testing JWT validation without a backend JWT service:
 
 ```bash
 KONG_VERSION=3.0.x pongo shell
+# NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-manual-test.sh
 
@@ -287,6 +288,7 @@ For testing the full flow with a mock JWT backend that returns a static JWT:
 
 ```bash
 KONG_VERSION=3.0.x pongo shell
+# NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-mock-test.sh
 
@@ -319,6 +321,7 @@ GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f do
 KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
 
 # 3. Start Kong (inside the shell)
+# NOTE: If you plan to use the setup scripts below, you should answer 'n' to importing "kong.yml"
 kms
 
 # 4. Setup Kong to route to your local Docker midtier/graphql

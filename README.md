@@ -138,6 +138,30 @@ spec:
 ```
 
 
+Release Process
+---------------
+
+To release a new version of the plugin:
+
+1. **Create a new release branch and rockspec** in this repository by running the [Release Kong Plugin](https://github.com/harmonicai/kong-remote-jwt-auth/actions/workflows/release.yml) GitHub action. Manually increment the release version in the "Run workflow" dropdown.
+
+2. **Build a new Kong Docker image** with the updated plugin by running the [Build Kong Docker Image with Auth Plugin](https://github.com/harmonicai/backend/actions/workflows/kong_docker_build.yml) GitHub action in the backend repository. Specify the plugin branch version from step 1 in the "Run workflow" dropdown.
+
+3. **Update the Kong image tag** in the kubernetes repository configs and publish PRs. Deploy to dev/canary first and test before deploying to production.
+
+   Files to update:
+   - `flux/dev/kong/01_kong.yaml`
+   - `flux/canary/kong/01_kong.yaml`
+   - `flux/prd/kong/01_kong.yaml`
+
+   Example change:
+   ```yaml
+   image:
+     repository: gcr.io/innate-empire-283902/github.com/harmonicai/backend/kong/prd
+     tag: "v2.0.1"  # Update this to the new version, e.g., "v2.0.3"
+   ```
+
+
 Q&A
 ---
 
