@@ -40,12 +40,11 @@ if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
 fi
 
 # Create test service
-# Uses httpbin.konghq.com, as referenced in the Kong documentation for plugin testing:
-# https://developer.konghq.com/custom-plugins/get-started/add-plugin-testing/
+# Uses local go-httpbin container (started via .pongo/httpbin.yml)
 echo "Creating service..."
 curl -s -X POST http://localhost:8001/services \
   --data name=test-service \
-  --data url=https://httpbin.konghq.com/anything \
+  --data url=http://httpbin:8080/anything \
   --data connect_timeout=5000 \
   --data read_timeout=5000
 

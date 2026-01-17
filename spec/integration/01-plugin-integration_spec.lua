@@ -19,10 +19,10 @@ for _, strategy in helpers.each_strategy({ "postgres" }) do
                 "services",
             }, { "remote-jwt-auth" })
 
-            -- Create a test service pointing to httpbin (external service)
+            -- Create a test service pointing to local httpbin container (go-httpbin)
             local service = bp.services:insert({
                 name = "test-service",
-                url = "https://httpbin.konghq.com/anything",
+                url = "http://httpbin:8080/anything",
             })
 
             -- Create a test route
@@ -58,7 +58,7 @@ for _, strategy in helpers.each_strategy({ "postgres" }) do
             -- Create a second service/route WITHOUT anonymous fallback for 401 tests
             local service_no_anon = bp.services:insert({
                 name = "test-service-no-anon",
-                url = "https://httpbin.konghq.com/anything",
+                url = "http://httpbin:8080/anything",
             })
 
             local route_no_anon = bp.routes:insert({
@@ -199,7 +199,7 @@ for _, strategy in helpers.each_strategy({ "postgres" }) do
 
             local service = bp.services:insert({
                 name = "compat-service",
-                url = "https://httpbin.konghq.com/anything",
+                url = "http://httpbin:8080/anything",
             })
 
             local route = bp.routes:insert({
