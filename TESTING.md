@@ -135,7 +135,7 @@ All tests passed!
 
 ### Cerberus JWT Fetching Tests
 
-These tests import the real `cerberus.lua` module and test JWT fetching, caching, and retry logic:
+These tests import the real `cerberus.lua` module and test JWT fetching and retry logic:
 
 ```bash
 pongo run spec/unit/cerberus-jwt-fetching-test.lua
@@ -176,10 +176,6 @@ All tests passed!
 - ✅ Passes original request headers to backend
 - ✅ Uses configured timeout
 - ✅ Uses default timeout when not specified
-
-**Caching:**
-- ✅ Caches JWT after successful fetch
-- ✅ Uses per-user cache keys
 
 **Error Handling:**
 - ✅ Handles HTTP connection failure gracefully
@@ -277,7 +273,8 @@ Pongo shell provides a full Kong environment for manual testing (e.g. with sampl
 For testing JWT validation without a backend JWT service:
 
 ```bash
-KONG_VERSION=3.0.x pongo shell
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
+# NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-manual-test.sh
 
@@ -290,7 +287,8 @@ curl -i 'http://localhost:8000/test' -H 'Authorization: Bearer test-token'
 For testing the full flow with a mock JWT backend that returns a static JWT:
 
 ```bash
-KONG_VERSION=3.0.x pongo shell
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
+# NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-mock-test.sh
 
@@ -323,6 +321,7 @@ GRPC_DNS_RESOLVER=native ENV_NAME=DEV docker compose -f docker-compose.yml -f do
 KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
 
 # 3. Start Kong (inside the shell)
+# NOTE: If you plan to use the setup scripts below, you should answer 'n' to importing "kong.yml"
 kms
 
 # 4. Setup Kong to route to your local Docker midtier/graphql

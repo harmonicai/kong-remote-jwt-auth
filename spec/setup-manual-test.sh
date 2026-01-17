@@ -32,9 +32,8 @@ echo "Setting up Kong for manual testing..."
 # Check if Kong is running
 if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
   echo "Error: Kong is not running."
-  echo "Please start Kong first with the shared dict configured:"
+  echo "Please start Kong first:"
   echo ""
-  echo "  export KONG_NGINX_HTTP_LUA_SHARED_DICT=\"remote_jwt_auth 1m\""
   echo "  kms"
   echo ""
   exit 1

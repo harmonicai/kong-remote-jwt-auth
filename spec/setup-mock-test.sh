@@ -18,20 +18,22 @@ echo "Setting up Kong for manual testing with mock JWT backend..."
 # Check if Kong is running
 if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
   echo "Error: Kong is not running."
-  echo "Please start Kong first with the shared dict configured:"
+  echo "Please start Kong first:"
   echo ""
-  echo "  export KONG_NGINX_HTTP_LUA_SHARED_DICT=\"remote_jwt_auth 1m\""
   echo "  kms"
   echo ""
   exit 1
 fi
 
 # Create mock JWT backend service
-# This uses httpbin's /base64 endpoint to return a fake JWT string
+# This uses httpbin's /base64 endpoint to return a fake JWT string "JWT test response"
 echo "Creating mock JWT backend service..."
 curl -s -X POST http://localhost:8001/services \
-  --data name=mock-jwt-backend \
-  --data url=https://httpbin.konghq.com/base64/ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnpkV0lpT2lJeE1qTTBOVFkzT0Rrd0lpd2libUZ0WlNJNklrTmxjbUpsY25WeklFcFhWQ0lzSW1saGRDSTZNVFV4TmpJek9UQXlNbjAuU2ZsS3h3UkpTTWVLS0YyUVQ0ZndwTWVKZjM2UE9rNnlKVl9hZFFzc3c1Yw
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "mock-jwt-backend",
+    "url": "https://httpbin.konghq.com/base64/SldUIHRlc3QgcmVzcG9uc2U="
+  }'
 
 curl -s -X POST http://localhost:8001/services/mock-jwt-backend/routes \
   --data name=mock-jwt-route \
@@ -59,16 +61,24 @@ curl -s -X POST http://localhost:8001/consumers \
 curl -s -X POST http://localhost:8001/consumers \
   --data username=anonymous
 
-# Enable the plugin with mock JWT backend
+# Enable the plugin with Firebase signing certificates and mock JWT backend
 echo "Enabling remote-jwt-auth plugin..."
 curl -s -X POST http://localhost:8001/services/test-service/plugins \
-  --data name=remote-jwt-auth \
-  --data config.authenticated_consumer=test-consumer \
-  --data config.anonymous=anonymous \
-  --data 'config.signing_urls[]=https://www.googleapis.com/oauth2/v1/certs' \
-  --data config.cache_namespace=mock-test \
-  --data config.jwt_service_url=http://localhost:8000/mock-jwt \
-  --data config.jwt_service_timeout=5000
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "remote-jwt-auth",
+    "config": {
+      "authenticated_consumer": "test-consumer",
+      "anonymous": "anonymous",
+      "signing_urls": ["https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"],
+      "claims_to_verify": [
+        {"name": "iss", "allowed_values": ["https://securetoken.google.com/innate-empire-283902"]},
+        {"name": "aud", "allowed_values": ["innate-empire-283902"]}
+      ],
+      "jwt_service_url": "http://localhost:8000/mock-jwt",
+      "jwt_service_timeout": 5000
+    }
+  }'
 
 echo ""
 echo "Setup complete!"
