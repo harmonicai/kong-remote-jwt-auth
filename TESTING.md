@@ -273,7 +273,7 @@ Pongo shell provides a full Kong environment for manual testing (e.g. with sampl
 For testing JWT validation without a backend JWT service:
 
 ```bash
-KONG_VERSION=3.0.x pongo shell
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
 # NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-manual-test.sh
@@ -287,7 +287,7 @@ curl -i 'http://localhost:8000/test' -H 'Authorization: Bearer test-token'
 For testing the full flow with a mock JWT backend that returns a static JWT:
 
 ```bash
-KONG_VERSION=3.0.x pongo shell
+KONG_VERSION=3.0.x KONG_LOG_LEVEL=debug pongo shell
 # NOTE: If you plan to use the setup script below, you should answer 'n' to importing "kong.yml"
 kms
 bash /kong-plugin/spec/setup-mock-test.sh
