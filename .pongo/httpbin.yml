@@ -1,0 +1,11 @@
+services:
+  httpbin:
+    image: mccutchen/go-httpbin:${HTTPBIN:-2.20.0}
+    healthcheck:
+      test: ["NONE"]
+    networks:
+      - ${NETWORK_NAME}
+
+networks:
+  ${NETWORK_NAME}:
+    external: true

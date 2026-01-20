@@ -3,7 +3,7 @@
 # Usage: Run inside pongo shell: bash /kong-plugin/spec/setup-mock-test.sh
 #
 # This script sets up:
-# - A mock JWT backend service (using httpbin to echo back a fake JWT)
+# - A mock JWT backend service (using local go-httpbin container to echo back a fake JWT)
 # - A test service that uses the remote-jwt-auth plugin
 #
 # Example:
@@ -26,13 +26,13 @@ if ! curl -s http://localhost:8001/ > /dev/null 2>&1; then
 fi
 
 # Create mock JWT backend service
-# This uses httpbin's /base64 endpoint to return a fake JWT string "JWT test response"
+# This uses local go-httpbin's /base64 endpoint to return a fake JWT string "JWT test response"
 echo "Creating mock JWT backend service..."
 curl -s -X POST http://localhost:8001/services \
   -H "Content-Type: application/json" \
   -d '{
     "name": "mock-jwt-backend",
-    "url": "https://httpbin.konghq.com/base64/SldUIHRlc3QgcmVzcG9uc2U="
+    "url": "http://httpbin:8080/base64/SldUIHRlc3QgcmVzcG9uc2U="
   }'
 
 curl -s -X POST http://localhost:8001/services/mock-jwt-backend/routes \
@@ -43,7 +43,7 @@ curl -s -X POST http://localhost:8001/services/mock-jwt-backend/routes \
 echo "Creating test service..."
 curl -s -X POST http://localhost:8001/services \
   --data name=test-service \
-  --data url=https://httpbin.konghq.com/anything \
+  --data url=http://httpbin:8080/anything \
   --data connect_timeout=5000 \
   --data read_timeout=5000
 
