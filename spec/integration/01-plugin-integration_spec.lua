@@ -341,7 +341,10 @@ for _, strategy in helpers.each_strategy({ "postgres" }) do
 
                 -- httpbin echoes back headers sent to upstream
                 -- The x-harmonic-cerberus-jwt header should NOT be present (was cleared)
-                assert.is_nil(json.headers["X-Harmonic-Cerberus-Jwt"], "Cerberus JWT header should be cleared when x-harmonic-cauth is not present")
+                assert.is_nil(
+                    json.headers["X-Harmonic-Cerberus-Jwt"],
+                    "Cerberus JWT header should be cleared when x-harmonic-cauth is not present"
+                )
             end)
 
             it("clears x-harmonic-cerberus-jwt when x-harmonic-cauth is not 'enabled'", function()
@@ -356,7 +359,10 @@ for _, strategy in helpers.each_strategy({ "postgres" }) do
                 local json = cjson.decode(body)
 
                 -- The cerberus header should be cleared
-                assert.is_nil(json.headers["X-Harmonic-Cerberus-Jwt"], "Cerberus JWT header should be cleared when x-harmonic-cauth is not 'enabled'")
+                assert.is_nil(
+                    json.headers["X-Harmonic-Cerberus-Jwt"],
+                    "Cerberus JWT header should be cleared when x-harmonic-cauth is not 'enabled'"
+                )
             end)
 
             it("attempts cerberus JWT fetch when x-harmonic-cauth is 'enabled'", function()
