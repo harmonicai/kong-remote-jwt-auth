@@ -99,6 +99,9 @@ _G.kong = {
         get_headers = function()
             return mock_request_headers
         end,
+        get_header = function(name)
+            return mock_request_headers[name]
+        end,
         get_query_arg = function(name)
             return mock_query_args[name]
         end,
@@ -253,9 +256,41 @@ end
 print("Basic Functionality Tests")
 print("-------------------------")
 
+run_test("clears cerberus header when x-harmonic-cauth header is not present", function()
+    local config = tbl_extend(base_config)
+    mock_consumer = { username = "test-user" }
+
+    -- Pre-set a spoofed header value that should be cleared
+    set_headers["x-harmonic-cerberus-jwt"] = "spoofed-jwt-value"
+
+    cerberus.set_cerberus_jwt_header(config)
+
+    -- Should clear any client-set value
+    assert_equals(nil, set_headers["x-harmonic-cerberus-jwt"], "Should clear cerberus header")
+end)
+
+run_test("clears cerberus header when x-harmonic-cauth header is not 'enabled'", function()
+    local config = tbl_extend(base_config)
+    mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "disabled",
+    }
+
+    -- Pre-set a spoofed header value that should be cleared
+    set_headers["x-harmonic-cerberus-jwt"] = "spoofed-jwt-value"
+
+    cerberus.set_cerberus_jwt_header(config)
+
+    -- Should clear any client-set value
+    assert_equals(nil, set_headers["x-harmonic-cerberus-jwt"], "Should clear cerberus header")
+end)
+
 run_test("clears cerberus header when jwt_service_url is not configured", function()
     local config = {}
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     -- Pre-set a spoofed header value that should be cleared
     set_headers["x-harmonic-cerberus-jwt"] = "spoofed-jwt-value"
@@ -271,6 +306,9 @@ run_test("skips anonymous users", function()
         anonymous = "anonymous-user",
     })
     mock_consumer = { username = "anonymous-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -287,6 +325,9 @@ end)
 run_test("skips when no consumer present", function()
     local config = tbl_extend(base_config)
     mock_consumer = nil
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -303,6 +344,9 @@ end)
 run_test("fetches JWT from backend and sets header", function()
     local config = tbl_extend(base_config)
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -322,6 +366,7 @@ run_test("passes original request headers to backend", function()
         ["authorization"] = "Bearer firebase-token",
         ["user-agent"] = "test-client",
         ["x-custom-header"] = "custom-value",
+        ["x-harmonic-cauth"] = "enabled",
     }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
@@ -343,6 +388,7 @@ run_test("adds JWT from query param to Authorization header when no auth header 
     mock_consumer = { username = "test-user" }
     mock_request_headers = {
         ["user-agent"] = "test-client",
+        ["x-harmonic-cauth"] = "enabled",
     }
     mock_query_args = {
         ["jwt"] = "query-param-jwt-token",
@@ -369,6 +415,7 @@ run_test("does not override existing Authorization header with query param JWT",
     mock_consumer = { username = "test-user" }
     mock_request_headers = {
         ["Authorization"] = "Bearer existing-header-token",
+        ["x-harmonic-cauth"] = "enabled",
     }
     mock_query_args = {
         ["jwt"] = "query-param-jwt-token",
@@ -395,6 +442,9 @@ run_test("uses configured timeout", function()
         jwt_service_timeout = 10000,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -413,6 +463,9 @@ run_test("uses default timeout when not specified", function()
         -- jwt_service_timeout not specified
     }
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -437,6 +490,9 @@ run_test("handles HTTP connection failure gracefully", function()
         jwt_service_retries = 1, -- Only 1 attempt to speed up test
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     -- Don't set any mock response - simulates connection failure
     set_mock_http_failure(true, 999)
@@ -462,6 +518,9 @@ run_test("handles non-200 HTTP status", function()
         jwt_service_retries = 1,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 401,
@@ -478,6 +537,9 @@ run_test("handles 500 error with retry", function()
         jwt_service_retries = 3,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     -- Return 500 error (will be retried)
     set_mock_http_response("http://backend:8080/auth/jwt", {
@@ -497,6 +559,9 @@ run_test("handles empty response body", function()
         jwt_service_retries = 1,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -523,6 +588,9 @@ run_test("handles nil response body", function()
         jwt_service_retries = 1,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -546,6 +614,9 @@ run_test("retries on connection failure then succeeds", function()
         jwt_service_retries = 3,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     -- Fail first 2 attempts, succeed on 3rd
     set_mock_http_failure(true, 2)
@@ -565,6 +636,9 @@ run_test("does not retry on 4xx errors", function()
         jwt_service_retries = 3,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 400,
@@ -582,6 +656,9 @@ run_test("uses configured retry count", function()
         jwt_service_retries = 5,
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     -- Always fail
     set_mock_http_failure(true, 999)
@@ -597,6 +674,9 @@ run_test("uses default retry count when not specified", function()
         -- jwt_service_retries not specified, defaults to 3
     }
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_failure(true, 999)
 
@@ -615,6 +695,9 @@ print("--------------------")
 run_test("uses GET method for backend request", function()
     local config = tbl_extend(base_config)
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://backend:8080/auth/jwt", {
         status = 200,
@@ -632,6 +715,9 @@ run_test("uses configured jwt_service_url", function()
         jwt_service_url = "http://custom-service:9000/custom/path",
     })
     mock_consumer = { username = "test-user" }
+    mock_request_headers = {
+        ["x-harmonic-cauth"] = "enabled",
+    }
 
     set_mock_http_response("http://custom-service:9000/custom/path", {
         status = 200,
