@@ -11,6 +11,7 @@ local function get_request_id()
 end
 
 local HARMONIC_CERBERUS_JWT = "x-harmonic-cerberus-jwt"
+local HARMONIC_CAUTH_HEADER = "x-harmonic-cauth"
 
 -- Retry HTTP request with exponential backoff and jitter
 -- Only retries on connection errors and 5xx responses
@@ -124,9 +125,23 @@ local function fetch_jwt_from_backend(config, consumer_id)
 end
 
 -- Fetch Cerberus JWT from backend and set in header
--- Skips if user is anonymous or jwt_service_url is not configured
+-- Skips if user is anonymous, jwt_service_url is not configured, or x-harmonic-cauth header is not "enabled"
 -- @param config Plugin configuration
 function _M.set_cerberus_jwt_header(config)
+    -- Check if x-harmonic-cauth header is set to "enabled"
+    local cauth_header = kong.request.get_header(HARMONIC_CAUTH_HEADER)
+    if cauth_header ~= "enabled" then
+        kong.service.request.clear_header(HARMONIC_CERBERUS_JWT)
+        kong.log.debug(
+            "Skipping Cerberus JWT - ",
+            HARMONIC_CAUTH_HEADER,
+            " header is not 'enabled' (got: ",
+            tostring(cauth_header),
+            ")"
+        )
+        return
+    end
+
     if not config.jwt_service_url then
         -- Clients (e.g. frontend) calling API gateway should not be setting the Cerberus header - clear it
         kong.service.request.clear_header(HARMONIC_CERBERUS_JWT)
