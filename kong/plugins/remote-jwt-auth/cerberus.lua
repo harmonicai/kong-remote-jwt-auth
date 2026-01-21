@@ -132,7 +132,13 @@ function _M.set_cerberus_jwt_header(config)
     local cauth_header = kong.request.get_header(HARMONIC_CAUTH_HEADER)
     if cauth_header ~= "enabled" then
         kong.service.request.clear_header(HARMONIC_CERBERUS_JWT)
-        kong.log.debug("Skipping Cerberus JWT - ", HARMONIC_CAUTH_HEADER, " header is not 'enabled' (got: ", tostring(cauth_header), ")")
+        kong.log.debug(
+            "Skipping Cerberus JWT - ",
+            HARMONIC_CAUTH_HEADER,
+            " header is not 'enabled' (got: ",
+            tostring(cauth_header),
+            ")"
+        )
         return
     end
 
